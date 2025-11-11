@@ -3,19 +3,20 @@
 <div align="center">
   <div style="display: flex; gap: 1rem; justify-content: center; align-items: center;" >
     <img
-      src="src\viola_description\images\viola_and_violin.jpg"
+      src="images\viola_and_violin.jpg"
       alt="SO-101 follower arm"
       title="SO-101 follower arm"
       style="width: 80%;"
     />
     <img
-      src="src\viola_description\images\cello.jpg"
+      src="images\cello.jpg"
       alt="SO-101 leader arm"
       title="SO-101 leader arm"
       style="width: 80%;"
     />
   </div>
 </div>
+
 
 ## 环境依赖/Dependent Environment
 
