@@ -8,6 +8,7 @@ import rclpy
 from rclpy.node import Node
 from robo_interfaces.srv import ReadData, WriteData
 from robo_interfaces.msg import SetAngle
+from std_srvs.srv import SetBool
 import struct
 from sensor_msgs.msg import JointState
 import math
@@ -137,8 +138,17 @@ class Arm_contorl(Node):
         self.current_angle = [0.0 for _ in range(self.Servo.SRV_NUM)]
         if(self.lock == "enable"):
             self.arm_move_by_time()
+            self.get_logger().info(
+                "Driver in CONTROL mode (lock=enable): torque on, "
+                "SetAngle commands will drive the servos."
+            )
         else:
             self.Servo.disable_torque(0xff)
+            self.get_logger().warning(
+                f"Driver in TEACH mode (lock={self.lock!r}): torque OFF, "
+                "SetAngle commands IGNORED. Joint states still publish. "
+                "Move the arm by hand; restart with lock:=enable to resume control."
+            )
 
         # 创建话题：发布joint_states / Create publisher for joint_states topic
         self.joint_states_publisher = self.create_publisher(
@@ -149,14 +159,45 @@ class Arm_contorl(Node):
             SetAngle, ROBO_SET_ANGLE_SUBSCRIBER, self.set_angle_callback, 10
         )
         self.timer2 = self.create_timer(0.03, self.timer_callback)
+
+        # Runtime lock toggle via std_srvs/SetBool: true=lock/control, false=teach
+        self.set_lock_srv = self.create_service(
+            SetBool, "~/set_lock", self._set_lock_cb,
+        )
+
         self.get_logger().info(f"初始化完成 / Initialization complete")
 
     def node_close(self):
         pass
         # self.Servo.servo_all_stop()
 
+    def _set_lock_cb(self, request, response):
+        """Toggle teach mode at runtime.
+
+        data=True  → switch to CONTROL mode (torque on, commands honoured).
+        data=False → switch to TEACH mode (torque off, commands ignored).
+        """
+        if request.data:
+            # Re-engage torque by commanding the current cached targets.
+            self.lock = "enable"
+            self.arm_move_by_time()
+            response.success = True
+            response.message = "CONTROL mode: torque ON, SetAngle honoured."
+            self.get_logger().info(response.message)
+        else:
+            self.lock = "disable"
+            self.Servo.disable_torque(0xff)
+            response.success = True
+            response.message = "TEACH mode: torque OFF, SetAngle ignored."
+            self.get_logger().warning(response.message)
+        return response
+
     # 新的执行命令 / Callback for new angle commands
     def set_angle_callback(self, msg):
+        if self.lock != "enable":
+            # Teach mode: ignore SetAngle commands so torque stays released
+            # and the arm remains free to move by hand.
+            return
         for i in range(len(msg.servo_id)):
             id = msg.servo_id[i]
             self.target_angle[id] = int(10*msg.target_angle[i])
