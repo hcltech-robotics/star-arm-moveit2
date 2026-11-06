@@ -9,7 +9,6 @@ from launch_ros.parameter_descriptions import ParameterValue  # 确保导入
 import xacro
 
 def generate_launch_description():
-    launch_calibration = LaunchConfiguration('launch_calibration')
 
     robot_description_file = os.path.join(get_package_share_directory('viola_moveit_config'), 'config','viola_description.urdf.xacro')
     robot_description = Command(
@@ -17,13 +16,10 @@ def generate_launch_description():
             FindExecutable(name='xacro'),
             ' ',
             robot_description_file,
-            ' launch_calibration:=',
-            launch_calibration,
         ])
 
 
     return LaunchDescription([
-            DeclareLaunchArgument('launch_calibration', default_value='false'),
             Node(
                 package='robot_state_publisher',
                 executable='robot_state_publisher',
