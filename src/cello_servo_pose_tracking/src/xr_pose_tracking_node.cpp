@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cstdint>
 #include <atomic>
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <mutex>
@@ -10,12 +11,14 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include <control_msgs/action/follow_joint_trajectory.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <moveit_msgs/srv/change_control_dimensions.hpp>
 #include <moveit_msgs/srv/change_drift_dimensions.hpp>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit_servo/pose_tracking.h>
 #include <moveit_servo/servo_parameters.h>
+#include <rclcpp_action/rclcpp_action.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
 #include <trajectory_msgs/msg/joint_trajectory_point.hpp>
@@ -23,6 +26,7 @@
 namespace
 {
 constexpr auto kNodeName = "xr_pose_tracking";
+constexpr auto kArmTrajectoryAction = "/arm_controller/follow_joint_trajectory";
 }  // namespace
 
 int main(int argc, char** argv)
@@ -63,13 +67,16 @@ int main(int argc, char** argv)
 
   const bool zero_stamp_means_now = node->declare_parameter("zero_stamp_means_now", true);
   std::atomic<bool> got_first_target_pose{ false };
+  std::atomic<uint64_t> target_rx_count{ 0 };
   std::mutex last_target_mutex;
   geometry_msgs::msg::PoseStamped last_target_pose;
   bool have_last_target_pose = false;
-  auto target_pose_pub = node->create_publisher<geometry_msgs::msg::PoseStamped>("target_pose", rclcpp::SensorDataQoS());
+  rclcpp::Time last_target_rx_time{ 0, 0, RCL_ROS_TIME };
+  auto pose_qos = rclcpp::QoS(rclcpp::KeepLast(10)).reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
+  auto target_pose_pub = node->create_publisher<geometry_msgs::msg::PoseStamped>("target_pose", pose_qos);
   auto xr_target_pose_sub = node->create_subscription<geometry_msgs::msg::PoseStamped>(
-      "/xr_target_pose", rclcpp::SensorDataQoS(),
-      [node, target_pose_pub, zero_stamp_means_now, &got_first_target_pose, &last_target_mutex, &last_target_pose, &have_last_target_pose](
+      "/xr_target_pose", pose_qos,
+      [node, target_pose_pub, zero_stamp_means_now, &got_first_target_pose, &target_rx_count, &last_target_mutex, &last_target_pose, &have_last_target_pose, &last_target_rx_time](
           const geometry_msgs::msg::PoseStamped::ConstSharedPtr& msg) {
         auto out = *msg;
         if (zero_stamp_means_now && out.header.stamp.sec == 0 && out.header.stamp.nanosec == 0)
@@ -81,7 +88,9 @@ int main(int argc, char** argv)
           std::lock_guard<std::mutex> lock(last_target_mutex);
           last_target_pose = out;
           have_last_target_pose = true;
+          last_target_rx_time = node->get_clock()->now();
         }
+        target_rx_count.fetch_add(1, std::memory_order_relaxed);
         got_first_target_pose.store(true);
       });
 
@@ -141,12 +150,15 @@ int main(int argc, char** argv)
   }
 
   const bool enable_startup_home = node->declare_parameter("enable_startup_home", true);
+  const double home_wait_for_subscribers_sec = node->declare_parameter("home_wait_for_subscribers_sec", 10.0);
   const auto home_joint_names = node->declare_parameter<std::vector<std::string>>(
       "home_joint_names", { "joint1", "joint2", "joint3", "joint4", "joint5", "joint6" });
   const auto home_joint_positions =
       node->declare_parameter<std::vector<double>>("home_joint_positions", { 0.0, -0.6, 1.0, -0.8, 0.5, 0.0 });
   const double home_trajectory_time_sec = node->declare_parameter("home_trajectory_time_sec", 2.0);
   auto home_pub = node->create_publisher<trajectory_msgs::msg::JointTrajectory>(servo_parameters->command_out_topic, 10);
+  auto home_action_client =
+      rclcpp_action::create_client<control_msgs::action::FollowJointTrajectory>(node, kArmTrajectoryAction);
 
   if (enable_startup_home)
   {
@@ -160,6 +172,17 @@ int main(int argc, char** argv)
       {
         rclcpp::sleep_for(std::chrono::milliseconds(100));
       }
+      if (home_pub->get_subscription_count() == 0)
+      {
+        const int max_wait_loops = std::max(0, static_cast<int>(home_wait_for_subscribers_sec * 10.0));
+        RCLCPP_WARN(node->get_logger(),
+                    "No subscribers yet on %s, waiting up to %.1f s for startup home consumers",
+                    servo_parameters->command_out_topic.c_str(), home_wait_for_subscribers_sec);
+        for (int i = 0; rclcpp::ok() && i < max_wait_loops && home_pub->get_subscription_count() == 0; ++i)
+        {
+          rclcpp::sleep_for(std::chrono::milliseconds(100));
+        }
+      }
 
       trajectory_msgs::msg::JointTrajectory home_msg;
       home_msg.header.stamp = node->get_clock()->now();
@@ -170,9 +193,49 @@ int main(int argc, char** argv)
       point.time_from_start.sec = static_cast<int32_t>(total_ns / 1000000000LL);
       point.time_from_start.nanosec = static_cast<uint32_t>(total_ns % 1000000000LL);
       home_msg.points.push_back(point);
-      home_pub->publish(home_msg);
-      RCLCPP_INFO(node->get_logger(), "Published startup home trajectory on %s",
-                  servo_parameters->command_out_topic.c_str());
+
+      if (home_pub->get_subscription_count() > 0)
+      {
+        home_pub->publish(home_msg);
+        RCLCPP_INFO(node->get_logger(), "Published startup home trajectory on %s",
+                    servo_parameters->command_out_topic.c_str());
+      }
+      else
+      {
+        RCLCPP_WARN(node->get_logger(),
+                    "No topic subscribers on %s. Trying action fallback: %s",
+                    servo_parameters->command_out_topic.c_str(), kArmTrajectoryAction);
+        if (home_action_client->wait_for_action_server(std::chrono::seconds(2)))
+        {
+          control_msgs::action::FollowJointTrajectory::Goal goal;
+          goal.trajectory = home_msg;
+          auto send_goal_future = home_action_client->async_send_goal(goal);
+          if (send_goal_future.wait_for(std::chrono::seconds(2)) == std::future_status::ready)
+          {
+            auto goal_handle = send_goal_future.get();
+            if (goal_handle)
+            {
+              RCLCPP_INFO(node->get_logger(),
+                          "Startup home trajectory sent via action %s", kArmTrajectoryAction);
+            }
+            else
+            {
+              RCLCPP_ERROR(node->get_logger(),
+                           "Startup home action goal was rejected by %s", kArmTrajectoryAction);
+            }
+          }
+          else
+          {
+            RCLCPP_ERROR(node->get_logger(),
+                         "Timeout while sending startup home action goal to %s", kArmTrajectoryAction);
+          }
+        }
+        else
+        {
+          RCLCPP_ERROR(node->get_logger(),
+                       "Neither topic subscriber nor action server available for startup home trajectory");
+        }
+      }
       const auto wait_ns =
           std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(home_trajectory_time_sec + 0.5));
       rclcpp::sleep_for(wait_ns);
@@ -184,7 +247,61 @@ int main(int argc, char** argv)
   moveit_servo::PoseTrackingStatusCode last_status = moveit_servo::PoseTrackingStatusCode::INVALID;
   auto last_log_time = node->now();
   auto last_error_log_time = node->now();
+  auto last_diag_log_time = node->now();
+  uint64_t last_target_rx_count_snapshot = 0;
   bool servo_unpaused = false;
+
+  // Wall timer fires every 500 ms on the spin thread, independent of the
+  // blocking moveToPose() call, so this log always appears during tracking.
+  uint64_t diag_last_rx_count = 0;
+  auto diag_timer = node->create_wall_timer(std::chrono::milliseconds(500), [&]() {
+    const uint64_t rx_total = target_rx_count.load(std::memory_order_relaxed);
+    const double tgt_hz = static_cast<double>(rx_total - diag_last_rx_count) * 2.0;
+    diag_last_rx_count = rx_total;
+
+    geometry_msgs::msg::PoseStamped target_copy;
+    bool have_target = false;
+    double target_age_s = -1.0;
+    {
+      std::lock_guard<std::mutex> lock(last_target_mutex);
+      if (have_last_target_pose)
+      {
+        target_copy = last_target_pose;
+        have_target = true;
+        target_age_s = (node->get_clock()->now() - last_target_rx_time).seconds();
+      }
+    }
+
+    planning_scene_monitor::LockedPlanningSceneRO scene_lock(planning_scene_monitor);
+    const auto& state = scene_lock->getCurrentState();
+    const auto ee_tf = state.getGlobalLinkTransform(servo_parameters->ee_frame_name);
+    const Eigen::Vector3d ee = ee_tf.translation();
+
+    if (have_target)
+    {
+      const Eigen::Vector3d tgt(
+          target_copy.pose.position.x, target_copy.pose.position.y, target_copy.pose.position.z);
+      const double pos_err = (tgt - ee).norm();
+
+      Eigen::Quaterniond q_ee(ee_tf.rotation()), q_tgt(
+          target_copy.pose.orientation.w, target_copy.pose.orientation.x,
+          target_copy.pose.orientation.y, target_copy.pose.orientation.z);
+      q_ee.normalize(); q_tgt.normalize();
+      const double ori_err = 2.0 * std::acos(std::min(1.0, std::max(-1.0, std::abs(q_ee.dot(q_tgt)))));
+
+      RCLCPP_INFO(node->get_logger(),
+          "TRACK-DIAG | ee=[%.3f %.3f %.3f] tgt=[%.3f %.3f %.3f] "
+          "pos_err=%.3fm ori_err=%.3frad tgt_hz=%.0f age=%.3fs",
+          ee.x(), ee.y(), ee.z(), tgt.x(), tgt.y(), tgt.z(),
+          pos_err, ori_err, tgt_hz, target_age_s);
+    }
+    else
+    {
+      RCLCPP_INFO(node->get_logger(),
+          "TRACK-DIAG | ee=[%.3f %.3f %.3f] tgt=[none] tgt_hz=%.0f",
+          ee.x(), ee.y(), ee.z(), tgt_hz);
+    }
+  });
 
   while (rclcpp::ok())
   {
@@ -268,6 +385,31 @@ int main(int argc, char** argv)
             moveit_servo::POSE_TRACKING_STATUS_CODE_MAP.at(status).c_str());
       }
       last_error_log_time = now;
+    }
+
+    // Diagnostics: show target stream health and tracking loop progress even when status does not change.
+    if ((now - last_diag_log_time).seconds() > 1.0)
+    {
+      const uint64_t rx_total = target_rx_count.load(std::memory_order_relaxed);
+      const uint64_t rx_delta = rx_total - last_target_rx_count_snapshot;
+      last_target_rx_count_snapshot = rx_total;
+
+      double target_age_s = -1.0;
+      {
+        std::lock_guard<std::mutex> lock(last_target_mutex);
+        if (have_last_target_pose)
+        {
+          target_age_s = (node->get_clock()->now() - last_target_rx_time).seconds();
+        }
+      }
+      RCLCPP_INFO(
+          node->get_logger(),
+          "Diag | status=%s target_rx_hz=%lu target_age=%.3f s timeout=%.3f s",
+          moveit_servo::POSE_TRACKING_STATUS_CODE_MAP.at(status).c_str(),
+          static_cast<unsigned long>(rx_delta),
+          target_age_s,
+          target_pose_timeout);
+      last_diag_log_time = now;
     }
 
     // When no fresh target pose is available, loop at a controlled retry rate.

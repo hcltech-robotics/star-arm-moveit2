@@ -8,9 +8,12 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_servo REQUIRED)
+find_package(control_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
 add_executable(xr_pose_tracking_node src/xr_pose_tracking_node.cpp)
@@ -19,7 +22,9 @@ ament_target_dependencies(
   xr_pose_tracking_node
   moveit_ros_planning
   moveit_servo
+  control_msgs
   rclcpp
+  rclcpp_action
 )
 target_link_libraries(
   xr_pose_tracking_node
@@ -37,7 +42,17 @@ ament_target_dependencies(
   visualization_msgs
 )
 
-install(TARGETS xr_pose_tracking_node wrist_tf_to_target_pose_node
+add_executable(joint_trajectory_action_bridge_node src/joint_trajectory_action_bridge_node.cpp)
+target_compile_features(joint_trajectory_action_bridge_node PUBLIC cxx_std_17)
+ament_target_dependencies(
+  joint_trajectory_action_bridge_node
+  control_msgs
+  rclcpp
+  rclcpp_action
+  trajectory_msgs
+)
+
+install(TARGETS xr_pose_tracking_node wrist_tf_to_target_pose_node joint_trajectory_action_bridge_node
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

@@ -38,7 +38,8 @@ public:
     publish_markers_ = declare_parameter<bool>("publish_markers", true);
     marker_topic_ = declare_parameter<std::string>("marker_topic", "/xr_target_markers");
 
-    target_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(output_topic_, rclcpp::SensorDataQoS());
+    auto pose_qos = rclcpp::QoS(rclcpp::KeepLast(10)).reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
+    target_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(output_topic_, pose_qos);
     marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(marker_topic_, 10);
     timer_ = create_wall_timer(
         std::chrono::duration<double>(1.0 / publish_rate_hz_),
@@ -85,7 +86,6 @@ private:
     if (!calibrated_)
     {
       wrist_to_ee_offset_tf_ = world_to_wrist_tf.inverse() * world_to_ee_tf;
-      world_translation_offset_ = world_to_ee_tf.getOrigin() - world_to_wrist_tf.getOrigin();
       calibrated_wrist_origin_ = world_to_wrist_tf.getOrigin();
       calibrated_ee_origin_ = world_to_ee_tf.getOrigin();
       double wr, wp, wy;
@@ -100,6 +100,13 @@ private:
           world_frame_.c_str(), wrist_frame_.c_str(), ee_frame_.c_str(), orientation_mode_.c_str());
     }
 
+    const tf2::Vector3 wrist_delta_world = world_to_wrist_tf.getOrigin() - calibrated_wrist_origin_;
+    const tf2::Vector3 mapped_delta_world(
+        translation_scale_x_ * wrist_delta_world.x(),
+        translation_scale_y_ * wrist_delta_world.y(),
+        translation_scale_z_ * wrist_delta_world.z());
+    const tf2::Vector3 target_origin_world = calibrated_ee_origin_ + mapped_delta_world;
+
     tf2::Transform world_to_target_tf;
     if (orientation_mode_ == "source_rp_yaw_offset")
     {
@@ -109,28 +116,25 @@ private:
       q_world_yaw_offset.setRPY(0.0, 0.0, yaw_offset_);
       const tf2::Quaternion target_q = q_world_yaw_offset * world_to_wrist_tf.getRotation();
 
-      // In this mode, keep calibrated translation offset while only orientation gets yaw offset.
-      // Translation offset is applied in the wrist frame, so it follows wrist motion.
-      tf2::Transform translation_only_offset(tf2::Quaternion::getIdentity(), wrist_to_ee_offset_tf_.getOrigin());
-      world_to_target_tf = world_to_wrist_tf * translation_only_offset;
+      // Position is always world-frame delta mapping; orientation depends on mode.
+      world_to_target_tf = world_to_ee_tf;
+      world_to_target_tf.setOrigin(target_origin_world);
       world_to_target_tf.setRotation(target_q);
     }
     else if (orientation_mode_ == "world_translation_only")
     {
       // Apply translation in world frame so source vertical motion remains world-vertical.
       // Keep target orientation equal to the current EE orientation (no orientation tracking).
-      const tf2::Vector3 wrist_delta_world = world_to_wrist_tf.getOrigin() - calibrated_wrist_origin_;
-      const tf2::Vector3 mapped_delta_world(
-          translation_scale_x_ * wrist_delta_world.x(),
-          translation_scale_y_ * wrist_delta_world.y(),
-          translation_scale_z_ * wrist_delta_world.z());
       world_to_target_tf = world_to_ee_tf;
-      world_to_target_tf.setOrigin(calibrated_ee_origin_ + mapped_delta_world);
+      world_to_target_tf.setOrigin(target_origin_world);
     }
     else
     {
-      // Default behavior: preserve full 6D offset calibrated at startup.
-      world_to_target_tf = world_to_wrist_tf * wrist_to_ee_offset_tf_;
+      // Full orientation offset mode: position still uses world-frame mapping,
+      // orientation keeps full calibrated wrist->ee rotation offset.
+      world_to_target_tf = world_to_ee_tf;
+      world_to_target_tf.setOrigin(target_origin_world);
+      world_to_target_tf.setRotation(world_to_wrist_tf.getRotation() * wrist_to_ee_offset_tf_.getRotation());
     }
 
     geometry_msgs::msg::PoseStamped target_pose;
@@ -230,7 +234,6 @@ private:
   double translation_scale_y_{ 1.0 };
   double translation_scale_z_{ 1.0 };
   double yaw_offset_{ 0.0 };
-  tf2::Vector3 world_translation_offset_{ 0.0, 0.0, 0.0 };
   tf2::Vector3 calibrated_wrist_origin_{ 0.0, 0.0, 0.0 };
   tf2::Vector3 calibrated_ee_origin_{ 0.0, 0.0, 0.0 };
   bool publish_markers_{ true };
