@@ -4,25 +4,28 @@ Use bringup.launch.py, which runs the starai_hardware ros2_control driver.
 The two cannot run at the same time: the new driver locks the serial port.
 """
 from launch import LaunchDescription
-from launch_ros.actions import Node
-from moveit_configs_utils import MoveItConfigsBuilder
-from launch.substitutions import LaunchConfiguration
 from launch.actions import DeclareLaunchArgument
-import os
-from ament_index_python.packages import get_package_share_directory
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
-
+    servo_port_name = LaunchConfiguration("servo_port_name")
 
     # Create and return the launch description
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "servo_port_name",
+                default_value="/dev/star_arm_viola",
+                description="Serial device path for the robot servos",
+            ),
             Node(
                 package="robo_driver",
                 executable="driver",
                 name="cello_driver",
                 output="screen",
+                parameters=[{"servo_port_name": servo_port_name}],
             ),
             Node(
                 package="cello_controller",

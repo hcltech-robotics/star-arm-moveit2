@@ -1,6 +1,20 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="viola_description">
+
+    <!-- Arguments -->
     <xacro:arg name="initial_positions_file" default="initial_positions.yaml" />
+
+    <xacro:arg name="launch_calibration" default="false" />
+    <xacro:arg name="use_camera_calibration" default="false" />
+
+    <xacro:arg name="launch_camera" default="false" />
+    <xacro:arg name="camera_name" default="camera" />
+    <xacro:arg name="camera_pos_x" default="0.4" />
+    <xacro:arg name="camera_pos_y" default="0.0" />
+    <xacro:arg name="camera_pos_z" default="0.68" />
+    <xacro:arg name="camera_pos_roll" default="0.0" />
+    <xacro:arg name="camera_pos_pitch" default="1.57079633" />
+    <xacro:arg name="camera_pos_yaw" default="3.14159265" />
 
     <!-- Import viola_description urdf file -->
     <xacro:include filename="$(find viola_description)/urdf/viola_description.urdf" />
@@ -8,7 +22,30 @@
     <!-- Import control_xacro -->
     <xacro:include filename="viola_description.ros2_control.xacro" />
 
-
     <xacro:viola_description_ros2_control name="FakeSystem" initial_positions_file="$(arg initial_positions_file)"/>
+
+    <!-- Conditionally include measured camera pose-->
+    <xacro:if value="$(eval launch_camera and not use_camera_calibration)">
+        <xacro:include filename="$(find viola_moveit_config)/config/camera_with_stand.xacro"/>
+        <xacro:camera_with_stand camera_pos_z="$(arg camera_pos_z)" 
+                                 camera_roll="$(arg camera_pos_roll)" 
+                                 camera_pitch="$(arg camera_pos_pitch)" 
+                                 camera_yaw="$(arg camera_pos_yaw)" 
+                                 camera_name="$(arg camera_name)" />
+
+        <!-- Connect camera to robot base -->
+        <joint name="base_link_to_camera_connection_joint" type="fixed">
+            <parent link="base_link"/>
+            <child link="camera_connection_link"/>
+            <origin xyz="$(arg camera_pos_x) $(arg camera_pos_y) $(arg camera_pos_z)" 
+                    rpy="0 0 0"/>
+        </joint>
+    </xacro:if>
+
+    <!-- Conditionally include calibration plate-->
+    <xacro:if value="$(eval launch_calibration)">
+        <xacro:include filename="$(find viola_moveit_config)/config/calibration_board_holder.xacro"/>
+        <xacro:calibration_board_holder parent="calib_connection_link"/>
+    </xacro:if>
 
 </robot>
