@@ -133,7 +133,6 @@ class Arm_contorl(Node):
         except ValueError as e:
             raise
         self.target_angle = self.Servo.ZERO_ANGLE
-        # self.target_angle 初始目标角度列表 / initial target angle list
         self.interval = [1500 for _ in range(self.Servo.SRV_NUM)]
         self.current_angle = [0.0 for _ in range(self.Servo.SRV_NUM)]
         if(self.lock == "enable"):
@@ -159,6 +158,8 @@ class Arm_contorl(Node):
             SetAngle, ROBO_SET_ANGLE_SUBSCRIBER, self.set_angle_callback, 10
         )
         self.timer2 = self.create_timer(0.03, self.timer_callback)
+        self._cmd_count = 0
+        self._diag_timer = self.create_timer(0.5, self._debug_log)
 
         # Runtime lock toggle via std_srvs/SetBool: true=lock/control, false=teach
         self.set_lock_srv = self.create_service(
@@ -192,6 +193,22 @@ class Arm_contorl(Node):
             self.get_logger().warning(response.message)
         return response
 
+    def _debug_log(self):
+        rate = self._cmd_count * 2.0  # commands per second (period = 0.5 s)
+        self._cmd_count = 0
+        lines = [f"cmd_rate={rate:.1f}Hz"]
+        joint_names = self.Servo.JOINT_
+        for i in range(self.Servo.SRV_NUM):
+            cmd_deg = self.target_angle[i] / 10.0
+            act_deg = float(self.current_angle[i])
+            err_deg = cmd_deg - act_deg
+            intv_ms = self.interval[i]
+            lines.append(
+                f"  J{i} {joint_names[i]:12s} | cmd={cmd_deg:+8.2f}° "
+                f"act={act_deg:+8.2f}° err={err_deg:+7.2f}° intv={intv_ms}ms"
+            )
+        self.get_logger().info("DRIVER-DIAG\n" + "\n".join(lines))
+
     # 新的执行命令 / Callback for new angle commands
     def set_angle_callback(self, msg):
         if self.lock != "enable":
@@ -203,9 +220,10 @@ class Arm_contorl(Node):
             self.target_angle[id] = int(10*msg.target_angle[i])
             if int(msg.time[i]) < 40:
                 (msg.time[i]) = 40
-            self.interval[id] = int(msg.time[i])+400
+            self.interval[id] = int(msg.time[i])
 
-            self.arm_move_by_time()
+        self._cmd_count += 1
+        self.arm_move_by_time()
 
     # 定时任务 / Timer callback
     def timer_callback(self):

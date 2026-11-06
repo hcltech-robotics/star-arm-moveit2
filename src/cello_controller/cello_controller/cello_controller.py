@@ -51,6 +51,9 @@ class RoboActionClient(Node):
     """机械臂与夹爪动作服务器节点 / Action server node for arm & gripper"""
     def __init__(self):
         super().__init__(ROBO_ACTION_NODE)
+        # Servo sends small, high-rate trajectory updates. Keep minimum segment duration low.
+        self.declare_parameter('min_point_duration_sec', 0.02)
+        self.min_point_duration_sec = float(self.get_parameter('min_point_duration_sec').value)
         # 使用可重入回调组支持并发 / Use reentrant callback group for concurrency
         self.callback_group = ReentrantCallbackGroup()
         # 创建机械臂轨迹跟踪动作服务器 / Arm trajectory action server
@@ -83,6 +86,9 @@ class RoboActionClient(Node):
         self.set_angle_publisher = self.create_publisher(
             SetAngle, ROBO_SET_ANGLE_PUBLISHER, 1
         )
+        self.get_logger().info(
+            f'{ROBO_ACTION_NODE} using min_point_duration_sec={self.min_point_duration_sec:.3f}'
+        )
         self.get_logger().info(f"{ROBO_ACTION_NODE} is ready.")  # 节点就绪日志 / ready log
         self.current_angle = [0.0] * 7  # 当前舵机角度缓存 / current servo angles
         self.last_time = 0  # 上一次时间戳 / last trajectory time index
@@ -108,7 +114,7 @@ class RoboActionClient(Node):
         for pt in trajectory.points:
             # 计算每段运行时间 / compute run duration
             tfs = pt.time_from_start.sec + pt.time_from_start.nanosec * 1e-9
-            duration = max(tfs - self.last_time, 0.1)
+            duration = max(tfs - self.last_time, self.min_point_duration_sec)
             self.last_time = tfs
             # 构造 SetAngle 消息 / build SetAngle msg
             msg = SetAngle(
