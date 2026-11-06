@@ -1,0 +1,10 @@
+<library path="starai_hardware">
+  <class name="starai_hardware/FashionStarSystem"
+         type="starai_hardware::FashionStarSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Fashion Star UART bus-servo arm (StarAI Cello / Viola): position + velocity streaming
+      over sync commands, with per-servo current, voltage, temperature and status feedback.
+    </description>
+  </class>
+</library>

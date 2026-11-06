@@ -1,3 +1,8 @@
+"""DEPRECATED: legacy Python driver (robo_driver + cello_controller).
+
+Use bringup.launch.py, which runs the starai_hardware ros2_control driver.
+The two cannot run at the same time: the new driver locks the serial port.
+"""
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from moveit_configs_utils import MoveItConfigsBuilder
@@ -24,6 +29,7 @@ def generate_launch_description():
                 executable="controller",
                 name="cello_controller",
                 output="screen",
+                parameters=[{"min_point_duration_sec": 0.02}],
             )        
         ]
     )

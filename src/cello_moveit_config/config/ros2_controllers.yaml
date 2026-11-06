@@ -1,15 +1,16 @@
-# This config file is used by ros2_control
+# ros2_control configuration, shared by mock hardware (demo.launch.py) and the real
+# arm (bringup.launch.py use_mock_hardware:=false).
 controller_manager:
   ros__parameters:
-    update_rate: 250  # Hz
+    # One bus read + one bus write per cycle (~3-5 ms at 1 Mbaud for 7 servos).
+    # 100 Hz leaves headroom; try 150-200 Hz if the USB adapter has low latency.
+    update_rate: 100  # Hz
 
     arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
-
     hand_controller:
       type: position_controllers/GripperActionController
-
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
@@ -23,11 +24,40 @@ arm_controller:
       - joint4
       - joint5
       - joint6
+    # position + velocity: the hardware gets the spline velocity as feedforward and
+    # aims the servos ahead of the setpoint. No PID gains: the servos close the loop.
     command_interfaces:
       - position
+      - velocity
     state_interfaces:
       - position
       - velocity
+    interpolation_method: splines
+    # Start each new trajectory from the last command, not the (lagging) measured
+    # state. Essential for streamed commands (MoveIt Servo, teleop): otherwise every
+    # message restarts from behind and motion stutters.
+    interpolate_from_desired_state: true
+    allow_partial_joints_goal: false
+    allow_nonzero_velocity_at_trajectory_end: false
+    action_monitor_rate: 50.0
+    constraints:
+      stopped_velocity_tolerance: 0.05  # rad/s
+      goal_time: 0.5                    # s allowed past the trajectory end to settle
+      # trajectory: max deviation during motion before the goal aborts (rad)
+      # goal: max error at the end (rad); ~1.7 deg covers servo deadband + gravity sag
+      joint1: {trajectory: 0.25, goal: 0.03}
+      joint2: {trajectory: 0.25, goal: 0.03}
+      joint3: {trajectory: 0.25, goal: 0.03}
+      joint4: {trajectory: 0.25, goal: 0.03}
+      joint5: {trajectory: 0.25, goal: 0.03}
+      joint6: {trajectory: 0.25, goal: 0.03}
+
 hand_controller:
   ros__parameters:
     joint: joint7_left
+    action_monitor_rate: 20.0
+    goal_tolerance: 0.001   # m
+    # Grasping an object stops the fingers short of the target: report success.
+    allow_stalling: true
+    stall_velocity_threshold: 0.001  # m/s
+    stall_timeout: 0.5               # s

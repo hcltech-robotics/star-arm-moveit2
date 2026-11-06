@@ -1,6 +1,10 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="cello_description">
     <xacro:arg name="initial_positions_file" default="initial_positions.yaml" />
+    <!-- true: simulated joints (demo.launch.py). false: real arm via starai_hardware -->
+    <xacro:arg name="use_mock_hardware" default="true" />
+    <xacro:arg name="port" default="/dev/ttyUSB0" />
+    <xacro:arg name="baudrate" default="1000000" />
 
     <!-- Import cello_description urdf file -->
     <xacro:include filename="$(find cello_description)/urdf/cello_description.urdf" />
@@ -8,7 +12,11 @@
     <!-- Import control_xacro -->
     <xacro:include filename="cello_description.ros2_control.xacro" />
 
-
-    <xacro:cello_description_ros2_control name="FakeSystem" initial_positions_file="$(arg initial_positions_file)"/>
+    <xacro:cello_description_ros2_control
+        name="CelloSystem"
+        initial_positions_file="$(arg initial_positions_file)"
+        use_mock_hardware="$(arg use_mock_hardware)"
+        port="$(arg port)"
+        baudrate="$(arg baudrate)"/>
 
 </robot>

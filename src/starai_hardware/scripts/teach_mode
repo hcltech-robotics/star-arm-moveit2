@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Teach mode: release servo torque so the arm can be moved by hand, while
+# /joint_states keeps publishing. "off" re-engages torque at the current pose
+# (no jump) and restarts the controllers.
+#
+#   ros2 run starai_hardware teach_mode on  [component] [controllers...]
+#   ros2 run starai_hardware teach_mode off [component] [controllers...]
+#
+# Defaults: component CelloSystem, controllers arm_controller hand_controller.
+# Requires deactivate_behavior=release (the default) on the hardware component.
+set -euo pipefail
+
+mode=${1:-}
+component=${2:-CelloSystem}
+shift $(( $# >= 2 ? 2 : $# ))
+controllers=("$@")
+if [ ${#controllers[@]} -eq 0 ]; then
+  controllers=(arm_controller hand_controller)
+fi
+
+case "$mode" in
+  on)
+    ros2 control switch_controllers --deactivate "${controllers[@]}"
+    ros2 control set_hardware_component_state "$component" inactive
+    echo "Teach mode ON: torque released, joint states still published."
+    ;;
+  off)
+    ros2 control set_hardware_component_state "$component" active
+    ros2 control switch_controllers --activate "${controllers[@]}"
+    echo "Teach mode OFF: holding current pose, controllers active."
+    ;;
+  *)
+    echo "usage: teach_mode on|off [component] [controllers...]" >&2
+    exit 1
+    ;;
+esac

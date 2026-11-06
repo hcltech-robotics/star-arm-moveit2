@@ -64,6 +64,24 @@ source ~/.bashrc
 
 https://github.com/user-attachments/assets/33fa3722-f0d4-4521-818d-a49d7f6b4909
 
+## Cello on real hardware (ros2_control driver)
+
+The Cello now runs through a native `ros2_control` hardware interface
+([`src/starai_hardware`](src/starai_hardware/README.md)) instead of the Python
+`robo_driver` + `cello_controller` pair. It gives continuous motion, velocity feedforward,
+100 Hz feedback, fault detection and the standard `JointTrajectoryController`, which
+MoveIt and MoveIt Servo use directly.
+
+```bash
+colcon build --packages-up-to cello_moveit_config
+ros2 launch cello_moveit_config bringup.launch.py port:=/dev/ttyUSB0
+# without an arm (simulated servo bus):
+ros2 run starai_hardware fake_fashionstar_bus.py --link /tmp/ttyFAKE &
+ros2 launch cello_moveit_config bringup.launch.py port:=/tmp/ttyFAKE
+```
+
+`driver.launch.py` / `actual_robot_demo.launch.py` (legacy driver) still exist but are deprecated.
+
 ## MoveIt2
 
 ### 激活机械臂&MoveIt2/Activate the robotic arm & MoveIt2
