@@ -16,21 +16,28 @@ find_package(tf2_ros REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
-add_executable(xr_pose_tracking_node src/xr_pose_tracking_node.cpp)
-target_compile_features(xr_pose_tracking_node PUBLIC cxx_std_17)
-ament_target_dependencies(
-  xr_pose_tracking_node
-  moveit_ros_planning
-  moveit_servo
-  control_msgs
-  rclcpp
-  rclcpp_action
-)
-target_link_libraries(
-  xr_pose_tracking_node
-  moveit_servo::pose_tracking
-  moveit_servo::moveit_servo_lib_parameters
-)
+# moveit_servo::pose_tracking was removed in Jazzy: build this node only where it exists.
+set(NODES wrist_tf_to_target_pose_node joint_trajectory_action_bridge_node)
+if(TARGET moveit_servo::pose_tracking)
+  add_executable(xr_pose_tracking_node src/xr_pose_tracking_node.cpp)
+  target_compile_features(xr_pose_tracking_node PUBLIC cxx_std_17)
+  ament_target_dependencies(
+    xr_pose_tracking_node
+    moveit_ros_planning
+    moveit_servo
+    control_msgs
+    rclcpp
+    rclcpp_action
+  )
+  target_link_libraries(
+    xr_pose_tracking_node
+    moveit_servo::pose_tracking
+    moveit_servo::moveit_servo_lib_parameters
+  )
+  list(APPEND NODES xr_pose_tracking_node)
+else()
+  message(WARNING "moveit_servo::pose_tracking not found: skipping xr_pose_tracking_node")
+endif()
 
 add_executable(wrist_tf_to_target_pose_node src/wrist_tf_to_target_pose_node.cpp)
 target_compile_features(wrist_tf_to_target_pose_node PUBLIC cxx_std_17)
@@ -52,7 +59,7 @@ ament_target_dependencies(
   trajectory_msgs
 )
 
-install(TARGETS xr_pose_tracking_node wrist_tf_to_target_pose_node joint_trajectory_action_bridge_node
+install(TARGETS ${NODES}
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
