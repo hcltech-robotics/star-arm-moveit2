@@ -26,6 +26,7 @@
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "starai_hardware/fashionstar_bus.hpp"
+#include "starai_hardware/servo_goal.hpp"
 
 #if __has_include("hardware_interface/types/hardware_component_interface_params.hpp")
 #define STARAI_HW_HAS_INTERFACE_PARAMS 1
@@ -112,6 +113,7 @@ private:
     uint16_t power_mw = 0;
     int max_misses = 0;        // missed replies in a row before read() fails
     bool feedforward = true;   // aim ahead using the commanded/estimated velocity
+    double squeeze_deg = -1.0; // grippers: hold this far past where they stalled; < 0 = off
 
     // Exported state
     double pos = 0.0;
@@ -139,6 +141,7 @@ private:
     double trim_deg = 0.0;     // gravity trim added to the servo goal
     double still_s = 0.0;      // how long the setpoint has been still
     bool drift_resent = false; // current goal already re-sent because the servo drifted
+    GripSqueeze squeeze;
 
     double to_joint(double deg) const { return (deg - offset_deg) * scale; }
   };

@@ -104,4 +104,48 @@ inline bool should_send(
   return true;
 }
 
+// Grip squeeze (grippers): a gripper that stalls on an object short of its goal would push
+// toward that goal at its power limit for as long as it holds. That trips the servo's
+// OVER_POWER flag every cycle and disturbs the bus. Instead, once the fingers have been stopped
+// more than kGripBlockedDeg short of the goal for `stall_s`, the goal becomes "where they
+// stopped + squeeze_deg" (0 = hold right there; the object stays pressed as it was when the
+// fingers stopped). Negative turns it off. A new command goal clears it. If the object slips,
+// the gripper closes only to the squeeze goal and does not re-grip.
+constexpr double kGripBlockedDeg = 2.0;
+
+struct GripSqueeze
+{
+  bool active = false;
+  double goal_deg = 0.0;     // squeeze goal while active
+  double command_deg = 0.0;  // command goal it was computed for
+  double stalled_s = 0.0;
+};
+
+inline double grip_squeeze(
+  double goal_deg, double measured_deg, double speed_dps, double dt, double squeeze_deg,
+  double stall_s, GripSqueeze & s)
+{
+  if (std::abs(goal_deg - s.command_deg) > 1e-6) {
+    s = GripSqueeze{};
+    s.command_deg = goal_deg;
+  }
+  if (s.active) {
+    return s.goal_deg;
+  }
+  const double gap = goal_deg - measured_deg;
+  if (squeeze_deg < 0.0 || std::abs(gap) <= std::max(squeeze_deg, kGripBlockedDeg) ||
+    std::abs(speed_dps) > 2.0)
+  {
+    s.stalled_s = 0.0;
+    return goal_deg;
+  }
+  s.stalled_s += dt;
+  if (s.stalled_s < stall_s) {
+    return goal_deg;
+  }
+  s.active = true;
+  s.goal_deg = measured_deg + std::copysign(squeeze_deg, gap);
+  return s.goal_deg;
+}
+
 }  // namespace starai_hardware

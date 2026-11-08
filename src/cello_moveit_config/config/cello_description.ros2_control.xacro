@@ -80,6 +80,10 @@
                 <!-- A gripper that pauses its replies (e.g. after an OVER_POWER trip) must
                      not stop the whole arm: allow 0.5 s of silence instead of 50 ms. -->
                 <param name="max_consecutive_misses">50</param>
+                <!-- Hold an object where the fingers were blocked, not by pushing at the power limit:
+                     that flickered OVER_POWER and made the wrist servos drop replies. 1 mm past
+                     contact already pushed at the full 1 W (measured). -->
+                <param name="grip_squeeze">0.0</param>
                 <command_interface name="position">
                     <param name="min">-0.026</param>
                     <param name="max">0.0</param>

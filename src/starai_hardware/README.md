@@ -115,7 +115,9 @@ Hardware (`<hardware><param>`):
 
 Joint (`<joint><param>`): `id` (required), `scale` (joint units per servo degree,
 default π/180, negative to invert), `offset_deg` (servo angle at joint zero),
-`max_speed_dps`, `power_mw`, `max_consecutive_misses`, `feedforward` (`false` for step-commanded joints such as grippers).
+`max_speed_dps`, `power_mw`, `max_consecutive_misses`, `feedforward` (`false` for step-commanded joints such as grippers),
+`grip_squeeze` (grippers, joint units: hold this far past where the fingers were blocked;
+0 = right there; default off).
 
 State interfaces: `position`, `velocity`, and optionally `current` (A), `voltage` (V),
 `temperature` (°C), `status` (raw bits). Command interfaces: `position`, optional `velocity`.
@@ -131,12 +133,16 @@ State interfaces: `position`, `velocity`, and optionally `current` (A), `voltage
 3. **Measure, then tune:** run `track_test.py`. A large "best-fit delay" means
    `lead_time` should increase. Ringing or overshoot at the end means it should decrease.
    Then try `update_rate: 150` in `ros2_controllers.yaml`.
-4. **Grasping:** the gripper holds by pushing on the object at its power limit. Its
-   goal is re-sent at most once while it is blocked, so the object is not re-squeezed.
-   Keep `power_mw` below the servo's own stall protection: on the Cello gripper 2 W
-   tripped OVER_POWER on a firm object and the servo stopped replying (1.5 W still
-   flickered it), so it runs at 1 W and may miss up to 50 replies before the driver
-   stops the arm.
+4. **Grasping:** a gripper that stalls on an object would push toward its "closed" goal
+   at its power limit for as long as it holds. On the Cello that flickered OVER_POWER
+   every cycle (at 2, 1.5 and 1 W alike: the flag means "at the limit"), the supply
+   dipped, and the wrist servos dropped replies until the driver stopped the arm. The
+   jiggling fingers also kept the gripper controller from ever reporting the grasp done.
+   So once the fingers have been stopped for 0.2 s short of the goal, the driver holds
+   them `grip_squeeze` past that point. The Cello uses 0 (hold where blocked): the object
+   stays pressed as it was when the fingers stopped. 1 mm past contact already pushed at
+   the full 1 W. The gripper controller sees a stalled grasp, so MoveIt and
+   GripperCommand work as before. A new command (e.g. open) clears it.
 
 ## Limits
 

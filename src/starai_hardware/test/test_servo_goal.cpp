@@ -136,3 +136,41 @@ TEST(ServoGoal, TrimConvergesIgnoresNoiseAndIsCapped)
   EXPECT_DOUBLE_EQ(update_trim(2.99, 5.0, 0.01, 0.1, 0.2, 3.0), 3.0);  // capped
   EXPECT_DOUBLE_EQ(update_trim(0.0, 5.0, 0.01, 0.0, 0.2, 3.0), 0.0);   // off
 }
+
+TEST(ServoGoal, StalledGripperSqueezesJustPastContact)
+{
+  using starai_hardware::GripSqueeze;
+  using starai_hardware::grip_squeeze;
+  GripSqueeze s;
+  // Closing toward 0 deg from 100 deg: moving, so the command goal is used.
+  EXPECT_DOUBLE_EQ(grip_squeeze(0.0, 60.0, 150.0, 0.01, 4.0, 0.2, s), 0.0);
+  // Stopped on an object at 47 deg: still the command goal until 0.2 s have passed.
+  for (int k = 0; k < 19; ++k) {
+    EXPECT_DOUBLE_EQ(grip_squeeze(0.0, 47.0, 0.0, 0.01, 4.0, 0.2, s), 0.0);
+  }
+  EXPECT_DOUBLE_EQ(grip_squeeze(0.0, 47.0, 0.0, 0.01, 4.0, 0.2, s), 43.0);
+  // Held: the squeeze goal stays put while the object gives a little.
+  EXPECT_DOUBLE_EQ(grip_squeeze(0.0, 45.5, 0.0, 0.01, 4.0, 0.2, s), 43.0);
+  // A new command (open) clears it at once.
+  EXPECT_DOUBLE_EQ(grip_squeeze(100.0, 45.5, 0.0, 0.01, 4.0, 0.2, s), 100.0);
+  EXPECT_FALSE(s.active);
+}
+
+TEST(ServoGoal, GripperThatReachesItsGoalIsNotSqueezed)
+{
+  using starai_hardware::GripSqueeze;
+  using starai_hardware::grip_squeeze;
+  GripSqueeze s;
+  for (int k = 0; k < 100; ++k) {  // closed on nothing: settled within the squeeze distance
+    EXPECT_DOUBLE_EQ(grip_squeeze(0.0, 1.0, 0.0, 0.01, 4.0, 0.2, s), 0.0);
+  }
+  GripSqueeze off;
+  for (int k = 0; k < 100; ++k) {  // negative = off
+    EXPECT_DOUBLE_EQ(grip_squeeze(0.0, 47.0, 0.0, 0.01, -1.0, 0.2, off), 0.0);
+  }
+  GripSqueeze at;
+  for (int k = 0; k < 30; ++k) {  // 0 = hold where the fingers were blocked
+    grip_squeeze(0.0, 47.0, 0.0, 0.01, 0.0, 0.2, at);
+  }
+  EXPECT_DOUBLE_EQ(grip_squeeze(0.0, 47.0, 0.0, 0.01, 0.0, 0.2, at), 47.0);
+}

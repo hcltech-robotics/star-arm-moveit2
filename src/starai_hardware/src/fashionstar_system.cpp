@@ -17,6 +17,7 @@ namespace
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 constexpr double kDegToRad = M_PI / 180.0;
 constexpr double kTrimSettleS = 0.3;  // s the setpoint must be still before trimming
+constexpr double kGripStallS = 0.2;   // s a gripper must be stopped short of its goal to squeeze
 
 const std::string * find_param(
   const std::unordered_map<std::string, std::string> & m, const std::string & key)
@@ -224,6 +225,12 @@ bool FashionStarSystem::parse_params(std::string & error)
       error = "joint '" + ji.name + "': scale must be non-zero";
       return false;
     }
+    double squeeze = -1.0;  // joint units; negative = off
+    if (!get_number(jp, "grip_squeeze", squeeze, error, -1.0, 1e6)) {
+      error = "joint '" + ji.name + "': " + error;
+      return false;
+    }
+    j.squeeze_deg = squeeze < 0.0 ? -1.0 : squeeze / std::abs(j.scale);
 
     bool has_pos_cmd = false;
     bool has_vel_cmd = false;
@@ -448,6 +455,7 @@ FashionStarSystem::CallbackReturn FashionStarSystem::on_activate(const rclcpp_li
     j.trim_deg = 0.0;
     j.still_s = 0.0;
     j.drift_resent = false;
+    j.squeeze = GripSqueeze{};
     j.last_goal_deg = j.servo_deg;
     j.last_send = now;
     j.sent_once = true;
@@ -681,8 +689,18 @@ void FashionStarSystem::fill_targets(double period_s, Clock::time_point now)
     const ServoGoal g = compute_servo_goal(
       q, v, j.servo_deg - j.trim_deg, map, lead,
       j.feedforward ? params_.correction_time : lead, params_.min_speed_dps, j.max_speed_dps);
-    const double goal_deg =
+    double goal_deg =
       clamp_to_limits(j.to_joint(g.goal_deg + j.trim_deg), map) / j.scale + j.offset_deg;
+    if (!j.feedforward) {
+      const bool was_squeezing = j.squeeze.active;
+      goal_deg = grip_squeeze(
+        goal_deg, j.servo_deg, j.vel / j.scale, period_s, j.squeeze_deg, kGripStallS, j.squeeze);
+      if (j.squeeze.active && !was_squeezing) {
+        RCLCPP_INFO(
+          logger_, "%s blocked at %.4f: holding at %.4f", j.name.c_str(), j.to_joint(j.servo_deg),
+          j.to_joint(goal_deg));
+      }
+    }
 
     const bool goal_moved = !j.sent_once ||
       std::abs(v / j.scale) > 0.5 ||  // > 0.5 deg/s
