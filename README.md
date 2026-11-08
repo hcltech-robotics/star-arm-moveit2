@@ -29,7 +29,7 @@ mkdir -p ~/starai_ws/src && cd ~/starai_ws/src
 git clone https://github.com/hcltech-robotics/star-arm-moveit2.git
 cd ~/starai_ws
 rosdep install --from-paths src --ignore-src -y
-colcon build --packages-skip cello_servo_pose_tracking   # not yet ported to Jazzy
+colcon build
 source install/setup.bash
 ```
 
