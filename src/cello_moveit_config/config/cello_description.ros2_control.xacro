@@ -4,98 +4,25 @@
       use_mock_hardware:=true   -> mock_components/GenericSystem (simulation, default)
       use_mock_hardware:=false  -> starai_hardware/FashionStarSystem (real Fashion Star servo bus)
 
-      Servo mapping: joint = (servo_deg - offset_deg) * scale
-        revolute joints: scale = pi/180 (rad per servo degree), offset 0
-        gripper (joint7_left, metres): servo 100 deg = 0 = open, servo 0 deg = -0.026 = closed
-        (fingers touch in the URDF at -0.026; measured on the real arm)
+      Gripper (joint7_left, metres): servo 100 deg = 0 = open, servo 0 deg = -0.026 = closed
+      (fingers touch in the URDF at -0.026; measured on the real arm)
     -->
-    <xacro:macro name="cello_joint" params="name id initial_value lower upper scale:=${pi/180} offset_deg:=0 extra:=''">
-        <joint name="${name}">
-            <param name="id">${id}</param>
-            <param name="scale">${scale}</param>
-            <param name="offset_deg">${offset_deg}</param>
-            <command_interface name="position">
-                <param name="min">${lower}</param>
-                <param name="max">${upper}</param>
-            </command_interface>
-            <command_interface name="velocity"/>
-            <state_interface name="position">
-                <param name="initial_value">${initial_value}</param>
-            </state_interface>
-            <state_interface name="velocity"/>
-            <!-- diagnostics, published on /dynamic_joint_states -->
-            <state_interface name="current"/>
-            <state_interface name="temperature"/>
-        </joint>
-    </xacro:macro>
+    <xacro:include filename="$(find starai_hardware)/urdf/fashionstar.ros2_control.xacro"/>
 
     <xacro:macro name="cello_description_ros2_control"
                  params="name initial_positions_file use_mock_hardware:=true port:=/dev/ttyUSB0 baudrate:=1000000">
         <xacro:property name="initial_positions" value="${xacro.load_yaml(initial_positions_file)['initial_positions']}"/>
 
         <ros2_control name="${name}" type="system">
-            <hardware>
-                <xacro:if value="${use_mock_hardware}">
-                    <plugin>mock_components/GenericSystem</plugin>
-                </xacro:if>
-                <xacro:unless value="${use_mock_hardware}">
-                    <plugin>starai_hardware/FashionStarSystem</plugin>
-                    <param name="port">${port}</param>
-                    <param name="baudrate">${baudrate}</param>
-                    <!-- How far ahead of the setpoint the servos are aimed. Raise if slow
-                         motion stutters, lower if it overshoots. -->
-                    <param name="lead_time">0.1</param>
-                    <param name="t_acc_ms">20</param>
-                    <param name="t_dec_ms">20</param>
-                    <param name="min_speed_dps">2.0</param>
-                    <param name="max_speed_dps">300.0</param>
-                    <param name="power_mw">8000</param>
-                    <param name="hold_power_mw">8000</param>
-                    <param name="read_timeout_ms">8</param>
-                    <param name="max_consecutive_misses">5</param>
-                    <param name="velocity_filter_hz">15.0</param>
-                    <param name="reset_multi_turn">true</param>
-                    <!-- hold | release | damping | none -->
-                    <param name="deactivate_behavior">release</param>
-                    <param name="shutdown_behavior">hold</param>
-                    <param name="error_behavior">hold</param>
-                </xacro:unless>
-            </hardware>
-            <xacro:cello_joint name="joint1" id="0" lower="-2.27" upper="2.27" initial_value="${initial_positions['joint1']}"/>
-            <xacro:cello_joint name="joint2" id="1" lower="-1.585" upper="1.57" initial_value="${initial_positions['joint2']}"/>
-            <xacro:cello_joint name="joint3" id="2" lower="-1.57" upper="1.585" initial_value="${initial_positions['joint3']}"/>
-            <xacro:cello_joint name="joint4" id="3" lower="-3.14" upper="3.14" initial_value="${initial_positions['joint4']}"/>
-            <xacro:cello_joint name="joint5" id="4" lower="-1.57" upper="1.57" initial_value="${initial_positions['joint5']}"/>
-            <xacro:cello_joint name="joint6" id="5" lower="-3.14" upper="3.14" initial_value="${initial_positions['joint6']}"/>
-            <joint name="joint7_left">
-                <param name="id">6</param>
-                <param name="scale">0.000261</param>
-                <param name="offset_deg">100</param>
-                <!-- grippers get step commands: drive straight to the target -->
-                <param name="feedforward">false</param>
-                <param name="max_speed_dps">200</param>
-                <!-- Below the servo's own stall protection: at 2 W a firm 2 cm object
-                     tripped OVER_POWER and the servo stopped replying (measured). -->
-                <param name="power_mw">1000</param>
-                <!-- A gripper that pauses its replies (e.g. after an OVER_POWER trip) must
-                     not stop the whole arm: allow 0.5 s of silence instead of 50 ms. -->
-                <param name="max_consecutive_misses">50</param>
-                <!-- Hold an object where the fingers were blocked, not by pushing at the power limit:
-                     that flickered OVER_POWER and made the wrist servos drop replies. 1 mm past
-                     contact already pushed at the full 1 W (measured). -->
-                <param name="grip_squeeze">0.0</param>
-                <command_interface name="position">
-                    <param name="min">-0.026</param>
-                    <param name="max">0.0</param>
-                </command_interface>
-                <command_interface name="velocity"/>
-                <state_interface name="position">
-                    <param name="initial_value">${initial_positions['joint7_left']}</param>
-                </state_interface>
-                <state_interface name="velocity"/>
-                <state_interface name="current"/>
-                <state_interface name="temperature"/>
-            </joint>
+            <xacro:fashionstar_hardware use_mock_hardware="${use_mock_hardware}" port="${port}" baudrate="${baudrate}"/>
+            <xacro:fashionstar_joint name="joint1" id="0" lower="-2.27" upper="2.27" initial_value="${initial_positions['joint1']}"/>
+            <xacro:fashionstar_joint name="joint2" id="1" lower="-1.585" upper="1.57" initial_value="${initial_positions['joint2']}"/>
+            <xacro:fashionstar_joint name="joint3" id="2" lower="-1.57" upper="1.585" initial_value="${initial_positions['joint3']}"/>
+            <xacro:fashionstar_joint name="joint4" id="3" lower="-3.14" upper="3.14" initial_value="${initial_positions['joint4']}"/>
+            <xacro:fashionstar_joint name="joint5" id="4" lower="-1.57" upper="1.57" initial_value="${initial_positions['joint5']}"/>
+            <xacro:fashionstar_joint name="joint6" id="5" lower="-3.14" upper="3.14" initial_value="${initial_positions['joint6']}"/>
+            <xacro:fashionstar_gripper name="joint7_left" id="6" lower="-0.026" scale="0.000261" offset_deg="100"
+                                       initial_value="${initial_positions['joint7_left']}"/>
         </ros2_control>
     </xacro:macro>
 </robot>

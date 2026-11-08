@@ -7,7 +7,7 @@ limits, a little response delay, and a position deadband. Each reply is delayed 
 the transmission time it would take at the given baud rate.
 
     ros2 run starai_hardware fake_fashionstar_bus.py --link /tmp/ttyFAKE
-    ros2 launch cello_moveit_config bringup.launch.py port:=/tmp/ttyFAKE
+    ros2 launch starai_bringup bringup.launch.py port:=/tmp/ttyFAKE
 
 Fault injection:
     --drop-id 3 --drop-after 10   servo 3 stops answering after 10 s

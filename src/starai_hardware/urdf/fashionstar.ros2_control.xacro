@@ -1,0 +1,103 @@
+<?xml version="1.0"?>
+<!--
+  ros2_control building blocks for StarAI arms on starai_hardware/FashionStarSystem.
+
+  Servo mapping: joint = (servo_deg - offset_deg) * scale
+    revolute joints: scale = pi/180 (rad per servo degree), offset 0
+    grippers: metres per servo degree, offset = servo angle when open
+
+  read_only:=true (a teleop leader moved by hand): joints get no command interfaces, and
+  the driver then keeps torque off and never sends motion.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:macro name="fashionstar_hardware" params="use_mock_hardware port baudrate">
+        <hardware>
+            <xacro:if value="${use_mock_hardware}">
+                <plugin>mock_components/GenericSystem</plugin>
+            </xacro:if>
+            <xacro:unless value="${use_mock_hardware}">
+                <plugin>starai_hardware/FashionStarSystem</plugin>
+                <param name="port">${port}</param>
+                <param name="baudrate">${baudrate}</param>
+                <!-- How far ahead of the setpoint the servos are aimed. Raise if slow
+                     motion stutters, lower if it overshoots. -->
+                <param name="lead_time">0.1</param>
+                <param name="t_acc_ms">20</param>
+                <param name="t_dec_ms">20</param>
+                <param name="min_speed_dps">2.0</param>
+                <param name="max_speed_dps">300.0</param>
+                <param name="power_mw">8000</param>
+                <param name="hold_power_mw">8000</param>
+                <param name="read_timeout_ms">8</param>
+                <param name="max_consecutive_misses">5</param>
+                <param name="velocity_filter_hz">15.0</param>
+                <param name="reset_multi_turn">true</param>
+                <!-- hold | release | damping | none -->
+                <param name="deactivate_behavior">release</param>
+                <param name="shutdown_behavior">hold</param>
+                <param name="error_behavior">hold</param>
+            </xacro:unless>
+        </hardware>
+    </xacro:macro>
+
+    <xacro:macro name="fashionstar_joint"
+                 params="name id lower upper initial_value read_only:=false scale:=${pi/180} offset_deg:=0">
+        <joint name="${name}">
+            <param name="id">${id}</param>
+            <param name="scale">${scale}</param>
+            <param name="offset_deg">${offset_deg}</param>
+            <xacro:unless value="${read_only}">
+                <command_interface name="position">
+                    <param name="min">${lower}</param>
+                    <param name="max">${upper}</param>
+                </command_interface>
+                <command_interface name="velocity"/>
+            </xacro:unless>
+            <state_interface name="position">
+                <param name="initial_value">${initial_value}</param>
+            </state_interface>
+            <state_interface name="velocity"/>
+            <!-- diagnostics, published on /dynamic_joint_states -->
+            <state_interface name="current"/>
+            <state_interface name="temperature"/>
+        </joint>
+    </xacro:macro>
+
+    <!-- Gripper: the fingers' joint, opened at servo `offset_deg`, closed at `lower`. -->
+    <xacro:macro name="fashionstar_gripper"
+                 params="name id lower scale offset_deg initial_value read_only:=false">
+        <joint name="${name}">
+            <param name="id">${id}</param>
+            <param name="scale">${scale}</param>
+            <param name="offset_deg">${offset_deg}</param>
+            <!-- grippers get step commands: drive straight to the target -->
+            <param name="feedforward">false</param>
+            <param name="max_speed_dps">200</param>
+            <!-- Below the servo's own stall protection: at 2 W a firm 2 cm object
+                 tripped OVER_POWER and the servo stopped replying (measured, Cello). -->
+            <param name="power_mw">1000</param>
+            <!-- A gripper that pauses its replies (e.g. after an OVER_POWER trip) must
+                 not stop the whole arm: allow 0.5 s of silence instead of 50 ms. -->
+            <param name="max_consecutive_misses">50</param>
+            <!-- Hold an object where the fingers were blocked, not by pushing at the power
+                 limit: that flickered OVER_POWER and made the wrist servos drop replies.
+                 1 mm past contact already pushed at the full 1 W (measured, Cello). -->
+            <param name="grip_squeeze">0.0</param>
+            <xacro:unless value="${read_only}">
+                <command_interface name="position">
+                    <param name="min">${lower}</param>
+                    <param name="max">0.0</param>
+                </command_interface>
+                <command_interface name="velocity"/>
+            </xacro:unless>
+            <state_interface name="position">
+                <param name="initial_value">${initial_value}</param>
+            </state_interface>
+            <state_interface name="velocity"/>
+            <state_interface name="current"/>
+            <state_interface name="temperature"/>
+        </joint>
+    </xacro:macro>
+
+</robot>

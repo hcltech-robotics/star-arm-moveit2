@@ -18,256 +18,84 @@
 </div>
 
 
-## 环境依赖/Dependent Environment
+## Setup
 
-No LSB modules are available.
-
-Distributor ID: Ubuntu
-
-Description:    Ubuntu 22.04.5 LTS
-
-Release:        22.04
-
-Codename:       Jammy
-
-ROS2:           Humble
-
-### 安装ROS2 Humble/Install ROS2 Humble
-
-[ROS2 Humble 安装指南](https://wiki.seeedstudio.com/cn/install_ros2_humble/)
-
-[ROS2 Humble Installation](https://wiki.seeedstudio.com/install_ros2_humble/)
-
-### 安装Moveit2/Install Moveit2
+Ubuntu 24.04, ROS 2 Jazzy, MoveIt 2. No Python servo SDK is needed: the driver speaks the
+Fashion Star protocol itself.
 
 ```bash
-sudo apt install ros-humble-moveit*
+sudo apt install ros-jazzy-moveit ros-jazzy-ros2-control ros-jazzy-ros2-controllers
+mkdir -p ~/starai_ws/src && cd ~/starai_ws/src
+git clone https://github.com/hcltech-robotics/star-arm-moveit2.git
+cd ~/starai_ws
+rosdep install --from-paths src --ignore-src -y
+colcon build --packages-skip cello_servo_pose_tracking   # not yet ported to Jazzy
+source install/setup.bash
 ```
 
-### 安装舵机SDK库/Install servo's SDK
+## Packages
+
+| package | contents |
+|---|---|
+| [`starai_hardware`](src/starai_hardware/README.md) | `ros2_control` driver for the Fashion Star servo bus |
+| `starai_bringup` | `bringup.launch.py` (any arm) and `teleop.launch.py` (Violin -> Viola) |
+| `cello_description`, `viola_description` | URDF and meshes |
+| `cello_moveit_config`, `viola_moveit_config` | MoveIt config, controllers, limits, named poses |
+
+The Violin has no packages of its own: it is the Viola's description in read-only mode.
+
+## Run an arm
 
 ```bash
-sudo pip install pyserial
-sudo pip install fashionstar-uart-sdk
+ros2 launch starai_bringup bringup.launch.py arm:=cello port:=/dev/ttyUSB0
+ros2 launch starai_bringup bringup.launch.py arm:=viola port:=/dev/ttyUSB0
 ```
 
-### 克隆star-arm-moveit2功能包/Clone `star-arm-moveit2` Ros2's Package
+This starts the driver, the arm and gripper controllers, MoveIt and RViz. If the arm is
+within 15 deg of its `rest` pose (e.g. parked), it then moves there (`startup_pose:=''` to
+stay put). Plan and execute in RViz, or use the `arm_controller` / `hand_controller`
+actions directly.
+
+Without an arm:
 
 ```bash
-cd ~/
-git clone https://github.com/Welt-liu/star-arm-moveit2.git
-cd ~/star-arm-moveit2
-colcon build
-echo "source ~/star-arm-moveit2/install/setup.bash" >> ~/.bashrc
-source ~/.bashrc
-```
-
-https://github.com/user-attachments/assets/33fa3722-f0d4-4521-818d-a49d7f6b4909
-
-## Cello on real hardware (ros2_control driver)
-
-The Cello now runs through a native `ros2_control` hardware interface
-([`src/starai_hardware`](src/starai_hardware/README.md)) instead of the Python
-`robo_driver` + `cello_controller` pair. It gives continuous motion, velocity feedforward,
-100 Hz feedback, fault detection and the standard `JointTrajectoryController`, which
-MoveIt and MoveIt Servo use directly.
-
-```bash
-colcon build --packages-up-to cello_moveit_config
-ros2 launch cello_moveit_config bringup.launch.py port:=/dev/ttyUSB0
-# without an arm (simulated servo bus):
+# simulated joints
+ros2 launch starai_bringup bringup.launch.py arm:=viola use_mock_hardware:=true
+# simulated servo bus: runs the real driver
 ros2 run starai_hardware fake_fashionstar_bus.py --link /tmp/ttyFAKE &
-ros2 launch cello_moveit_config bringup.launch.py port:=/tmp/ttyFAKE
+ros2 launch starai_bringup bringup.launch.py arm:=viola port:=/tmp/ttyFAKE
 ```
 
-`driver.launch.py` / `actual_robot_demo.launch.py` (legacy driver) still exist but are deprecated.
+## Teleop: Violin leads, Viola follows
 
-## MoveIt2
-
-### 激活机械臂&MoveIt2/Activate the robotic arm & MoveIt2
-
-#### 使用虚拟机械臂/Using a virtual robotic arm
-
-Viola
+Connect both arms, then:
 
 ```bash
-ros2 launch viola_moveit_config demo.launch.py 
+ros2 launch starai_bringup teleop.launch.py follower_port:=/dev/ttyUSB0 leader_port:=/dev/ttyUSB1
 ```
-<!-- markdownlint-disable MD033 -->
 
-<details>
+* The Violin runs the same driver read-only, in the `/violin` namespace: torque stays off,
+  no motion command is ever sent to it, and it publishes `/violin/joint_states`.
+* At start (and after the leader goes silent), the Viola moves to the Violin's pose at
+  0.3 rad/s, then follows at up to 1.5 rad/s per joint. There is no collision checking.
+* The Violin's gripper reading is mapped linearly onto the Viola's gripper
+  (`leader_gripper_open/closed` and `follower_gripper_open/closed` on the `teleop` node).
+  A grasped object is held where the fingers were blocked, so holding it does not
+  overheat the gripper.
+* MoveIt is off by default (`use_moveit:=true` to start it as well).
 
-<summary>Cello</summary>
+Use a stable device name per arm (udev rule, see the driver README) so the leader and
+follower ports don't swap.
+
+## Teach mode and recording
 
 ```bash
-ros2 launch cello_moveit_config demo.launch.py 
+ros2 run starai_hardware teach_mode on CelloSystem    # torque off, joint states keep publishing
+ros2 bag record /joint_states                        # record while moving the arm by hand
+ros2 run starai_hardware teach_mode off CelloSystem   # hold the current pose again
 ```
 
-</details>
-
-#### 使用真实的机械臂/Using a real robotic arm
-
-终端1:启动手臂硬件驱动/Terminal 1: Start the arm hardware driver
-
-手臂会移动到零位/The Arm Will Move to The Zero Position.
-
-Viola
-
-```bash
-ros2 launch viola_moveit_config driver.launch.py
-```
-
-<details>
-
-<summary>Cello</summary>
-
-```bash
-ros2 launch cello_moveit_config driver.launch.py
-```
-
-</details>
-
-终端2:启动moveit2/Terminal 2:Starthe Moveit2
-
-Viola
-
-```bash
-ros2 launch viola_moveit_config actual_robot_demo.launch.py
-```
-
-<details>
-
-<summary>Cello</summary>
-
-```bash
-ros2 launch cello_moveit_config actual_robot_demo.launch.py
-```
-
-</details>
-
-到此可实现虚拟机械臂控制真实机械臂的功能/At this point, you can control the real robotic arm with the virtual robotic arm.
-
-#### 手臂末端位姿读写示例/End-effector pose read/write demo
-
-终端3：启动末端位姿读写示例/Terminal 3: Start the end-effector pose read/write demo
-
-Viola
-
-```bash
-ros2 launch viola_moveit_config moveit_write_read.launch.py
-```
-
-<details>
-
-<summary>Cello</summary>
-
-```bash
-ros2 launch cello_moveit_config moveit_write_read.launch.py
-```
-
-</details>
-
-#### 位姿话题发送节点示例/Position and orientation topic sending node demo
-
-请更新文件/update here
-
-src/arm_moveit_write/src/topic_publisher.cpp
-
-```cpp
-    //Viola
-    // targets_.push_back({"Viola Start",{0.351, 0.000, 0.233},{0.506, -0.504, 0.494, -0.493},"open"});//点位 1（Viola Start）
-    // targets_.push_back({"Viola Home",{0.126, -0.000, 0.276},{0.502, -0.501, 0.498, -0.498},"close"});//点位 2（Viola Home）
-
-    //Cello
-    targets_.push_back({"Cello Start",{0.330, -0.324, 0.074},{0.523, -0.520, 0.477, -0.475},"open"});// 点位 1 (Cello Start)
-    targets_.push_back({"Cello right",{0.529, 0.113, 0.246},{0.523, -0.520, 0.477, -0.475},"close"});// 点位 2 (Cello right)
-    targets_.push_back({"Cello up",{0.278, 0.000, 0.438},{-0.506, 0.507, -0.496, 0.491},"open"});// 点位 3 (Cello up)
-    targets_.push_back({"Cello Home",{0.479, -0.000, 0.369},{-0.506, 0.507, -0.496, 0.491},"close"});// 点位 4 (Cello Home)
-
-```
-
-终端4：启动位姿话题发送节点/Terminal 4: Start the position and orientation topic sending node
-
-```bash
-colcon build
-source install/setup.sh
-ros2 run arm_moveit_write topic_publisher 
-```
-
-### MoveIt2-gazebo仿真机械臂例程/MoveIt2-Gazebo Simulation Robot Arm Example
-
-> [!TIP]
->
-> 在关闭gazebo图形界面后，建议在终端使用 `pkill -9 -f gazebo` 命令彻底关闭
-> 在运行例程前，需要关闭其他所有正在运行的节点。
-
-安装gazebo/Install gazebo
-
-  ```bash
-  sudo apt install gazebo
-  sudo apt install ros-humble-moveit*
-  ```
-
-终端1:启动gazebo图形界面/Terminal 1: Launch the Gazebo graphical user interface
-
-Viola
-
-```bash
-ros2 launch viola_gazebo viola_gazebo.launch.py
-```
-
-<details>
-
-<summary>Cello</summary>
-
-```bash
-ros2 launch cello_gazebo cello_gazebo.launch.py
-```
-
-</details>
-
-终端2:启动moveit2界面/Terminal 2:Launch the MoveIt2 interface
-
-Viola
-
-```bash
-ros2 launch viola_moveit_config gazebo_demo.launch.py
-```
-
-<details>
-
-<summary>Cello</summary>
-
-```bash
-ros2 launch cello_moveit_config gazebo_demo.launch.py
-```
-
-</details>
-
-## 机械臂示教模式/Teaching Mode for the Robotic Arm
-
-> [!TIP]
-> 需要重新录制轨迹，可将record-test文件夹删除or新建终端文件名record-test1/Delete the record-test folder, or create a new terminal file name record-test1
-
-终端1:启动手臂硬件驱动(示教模式)/Terminal 1: Start the arm hardware driver (teaching mode)
-
-```bash
-ros2 run robo_driver driver --ros-args -p lock:='disable'
-```
-
-终端2:记录手臂轨迹/Terminal 2: Record arm trajectory
-
-按下回车开始录制，再按下回车结束录制，通过dataset参数指定保存路径/Press Enter to start recording, press Enter to end recording, and specify the save path through the dataset parameter.
-
-```bash
-ros2 run ros2_bag_recorder bag_recorder --ros-args -p dataset:=star/record-test
-```
-
-终端3:重播运行轨迹/Terminal 3: Replay the recorded trajectory
-
-```bash
-ros2 bag play ./star/record-test
-```
+The hardware component is `CelloSystem` or `ViolaSystem`.
 
 ## FAQ
 

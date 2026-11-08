@@ -192,6 +192,10 @@ bool FashionStarSystem::parse_params(std::string & error)
   has_velocity_command_ = false;
   bool any_velocity_cmd = false;
   bool all_velocity_cmd = true;
+  // No command interfaces at all = read-only (a teleop leader moved by hand).
+  read_only_ = std::all_of(
+    info_.joints.begin(), info_.joints.end(),
+    [](const auto & ji) {return ji.command_interfaces.empty();});
   for (const auto & ji : info_.joints) {
     Joint j;
     j.name = ji.name;
@@ -249,8 +253,9 @@ bool FashionStarSystem::parse_params(std::string & error)
         return false;
       }
     }
-    if (!has_pos_cmd) {
-      error = "joint '" + ji.name + "' needs a 'position' command interface";
+    if (!has_pos_cmd && !read_only_) {
+      error = "joint '" + ji.name + "' needs a 'position' command interface (or remove the "
+        "command interfaces of every joint for a read-only arm)";
       return false;
     }
     any_velocity_cmd |= has_vel_cmd;
@@ -284,7 +289,11 @@ bool FashionStarSystem::parse_params(std::string & error)
     error = "either all joints or none must have a 'velocity' command interface";
     return false;
   }
-  has_velocity_command_ = all_velocity_cmd;
+  has_velocity_command_ = all_velocity_cmd && !read_only_;
+  if (read_only_) {
+    // Never engage torque: not on start, stop, shutdown or error.
+    p.deactivate_behavior = p.shutdown_behavior = p.error_behavior = StopBehavior::kRelease;
+  }
 
   params_ = p;
   return true;
@@ -413,7 +422,12 @@ FashionStarSystem::CallbackReturn FashionStarSystem::on_configure(const rclcpp_l
     j.cmd_pos = kNaN;
     j.cmd_vel = kNaN;
   }
-  RCLCPP_INFO(logger_, "Configured: %zu servos online", joints_.size());
+  if (read_only_) {
+    stop_all(StopBehavior::kRelease);  // a leader arm must move freely by hand
+  }
+  RCLCPP_INFO(
+    logger_, "Configured: %zu servos online%s", joints_.size(),
+    read_only_ ? " (read-only: torque off)" : "");
   return CallbackReturn::SUCCESS;
 }
 
@@ -430,6 +444,10 @@ FashionStarSystem::CallbackReturn FashionStarSystem::on_activate(const rclcpp_li
   if (!read_all(5)) {
     RCLCPP_ERROR(logger_, "Cannot read servo positions; refusing to activate");
     return CallbackReturn::FAILURE;
+  }
+  if (read_only_) {
+    RCLCPP_INFO(logger_, "Activated read-only: torque off, publishing positions");
+    return CallbackReturn::SUCCESS;
   }
   // Commands are clamped to the limits, so a joint far outside them would snap back at
   // full speed on the first cycle. Make the user move it back by hand instead.
@@ -727,6 +745,9 @@ FashionStarSystem::return_type FashionStarSystem::write(
 {
   if (!bus_.is_open()) {
     return return_type::ERROR;
+  }
+  if (read_only_) {
+    return return_type::OK;
   }
   const auto now = Clock::now();
   fill_targets(period.seconds(), now);

@@ -3,6 +3,12 @@
 
     <!-- Arguments -->
     <xacro:arg name="initial_positions_file" default="initial_positions.yaml" />
+    <!-- true: simulated joints (demo.launch.py). false: real arm via starai_hardware -->
+    <xacro:arg name="use_mock_hardware" default="true" />
+    <xacro:arg name="port" default="/dev/ttyUSB0" />
+    <xacro:arg name="baudrate" default="1000000" />
+    <!-- true: the Violin leader (same arm, moved by hand): read-only, torque always off -->
+    <xacro:arg name="leader" default="false" />
 
     <!-- Import viola_description urdf file -->
     <xacro:include filename="$(find viola_description)/urdf/viola_description.urdf" />
@@ -10,6 +16,20 @@
     <!-- Import control_xacro -->
     <xacro:include filename="viola_description.ros2_control.xacro" />
 
-    <xacro:viola_description_ros2_control name="FakeSystem" initial_positions_file="$(arg initial_positions_file)"/>
+    <xacro:macro name="viola_system" params="name read_only">
+        <xacro:viola_description_ros2_control
+            name="${name}"
+            initial_positions_file="$(arg initial_positions_file)"
+            use_mock_hardware="$(arg use_mock_hardware)"
+            port="$(arg port)"
+            baudrate="$(arg baudrate)"
+            read_only="${read_only}"/>
+    </xacro:macro>
+    <xacro:if value="$(arg leader)">
+        <xacro:viola_system name="ViolinSystem" read_only="true"/>
+    </xacro:if>
+    <xacro:unless value="$(arg leader)">
+        <xacro:viola_system name="ViolaSystem" read_only="false"/>
+    </xacro:unless>
 
 </robot>

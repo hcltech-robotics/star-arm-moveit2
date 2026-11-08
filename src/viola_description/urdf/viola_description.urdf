@@ -512,8 +512,8 @@
     <axis
       xyz="0 0 -1" />
     <limit
-      lower="-3.14"
-      upper="3.14"
+      lower="-0.03"
+      upper="0"
       effort="5"
       velocity="3.14" />
     <mimic joint="joint7_left" />

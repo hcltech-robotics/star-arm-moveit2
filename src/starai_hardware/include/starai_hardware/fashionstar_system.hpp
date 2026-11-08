@@ -159,6 +159,7 @@ private:
   Params params_;
   std::vector<Joint> joints_;
   bool has_velocity_command_ = false;
+  bool read_only_ = false;  // no command interfaces: a leader arm, torque always off
 
   FashionStarBus bus_;
   std::vector<uint8_t> ids_;

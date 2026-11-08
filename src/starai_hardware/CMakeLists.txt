@@ -42,6 +42,7 @@ ament_target_dependencies(starai_hardware PUBLIC ${THIS_PACKAGE_INCLUDE_DEPENDS}
 pluginlib_export_plugin_description_file(hardware_interface starai_hardware.xml)
 
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
+install(DIRECTORY urdf DESTINATION share/${PROJECT_NAME})
 install(TARGETS fashionstar_bus starai_hardware
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib

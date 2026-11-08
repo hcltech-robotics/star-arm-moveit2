@@ -1,22 +1,23 @@
 # starai_hardware
 
 `ros2_control` hardware interface for StarAI arms (Cello, Viola) built from Fashion Star
-UART bus servos. It replaces the legacy `robo_driver` + `cello_controller` pair: MoveIt,
-MoveIt Servo and teleop talk to the standard `JointTrajectoryController` and
-`GripperActionController`, and this plugin streams their setpoints to the servos.
+UART bus servos. MoveIt, MoveIt Servo and teleop talk to the standard
+`JointTrajectoryController` and `GripperActionController`, and this plugin streams their
+setpoints to the servos. An arm whose joints have no command interfaces runs read-only
+(the Violin teleop leader).
 
 ## Quick start
 
 ```bash
-# real arm
-ros2 launch cello_moveit_config bringup.launch.py port:=/dev/ttyUSB0
+# real arm (arm:=cello or arm:=viola)
+ros2 launch starai_bringup bringup.launch.py arm:=cello port:=/dev/ttyUSB0
 
 # no arm: simulated servo bus, real driver code path
 ros2 run starai_hardware fake_fashionstar_bus.py --link /tmp/ttyFAKE &
-ros2 launch cello_moveit_config bringup.launch.py port:=/tmp/ttyFAKE
+ros2 launch starai_bringup bringup.launch.py port:=/tmp/ttyFAKE
 
 # joints only (MoveIt's mock hardware, no driver)
-ros2 launch cello_moveit_config bringup.launch.py use_mock_hardware:=true
+ros2 launch starai_bringup bringup.launch.py use_mock_hardware:=true
 ```
 
 Measure tracking on your arm (also a good regression check after tuning). It first moves
@@ -30,9 +31,14 @@ ros2 run starai_hardware track_test.py --amplitude 0.3 --period 2.0 --cycles 2
 Teach mode (torque off, joint states keep publishing; "off" re-engages without a jump):
 
 ```bash
-ros2 run starai_hardware teach_mode on
-ros2 run starai_hardware teach_mode off
+ros2 run starai_hardware teach_mode on  [CelloSystem|ViolaSystem]
+ros2 run starai_hardware teach_mode off [CelloSystem|ViolaSystem]
 ```
+
+Robot descriptions build their `<ros2_control>` block from the macros in
+[`urdf/fashionstar.ros2_control.xacro`](urdf/fashionstar.ros2_control.xacro)
+(`fashionstar_hardware`, `fashionstar_joint`, `fashionstar_gripper`); see
+`cello_moveit_config/config/cello_description.ros2_control.xacro`.
 
 ## How it works
 
@@ -85,6 +91,9 @@ Other safety behaviour:
 * **Exclusive port lock:** a second driver (e.g. the legacy one) cannot share the bus.
 * **Command clamping:** commands are clamped to the `min`/`max` of each position command
   interface.
+* **Read-only arms:** if no joint has a command interface (`read_only:=true` in the
+  xacro macros), the driver releases torque at configure and never sends motion, also not
+  on stop, shutdown or error. Positions are still published.
 * **Fault logging:** stall, voltage, current, power and temperature faults are logged
   when they appear and when they clear. A flickering fault is logged at most every 2 s.
 

@@ -1,5 +1,5 @@
 # ros2_control configuration, shared by mock hardware (demo.launch.py) and the real
-# arm (bringup.launch.py use_mock_hardware:=false).
+# arm (starai_bringup bringup.launch.py).
 controller_manager:
   ros__parameters:
     # One bus read + one bus write per cycle (~3-5 ms at 1 Mbaud for 7 servos).

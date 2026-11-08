@@ -1,63 +1,29 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-    <xacro:macro name="viola_description_ros2_control" params="name initial_positions_file">
+    <!--
+      use_mock_hardware:=true   -> mock_components/GenericSystem (simulation, default)
+      use_mock_hardware:=false  -> starai_hardware/FashionStarSystem (real Fashion Star servo bus)
+      read_only:=true           -> Violin leader: no command interfaces, torque off
+
+      Gripper (joint7_left, metres): servo 100 deg = 0 = open, 0.032 m per 100 servo deg
+      (the legacy robo_driver conversion; not yet measured on the Viola).
+    -->
+    <xacro:include filename="$(find starai_hardware)/urdf/fashionstar.ros2_control.xacro"/>
+
+    <xacro:macro name="viola_description_ros2_control"
+                 params="name initial_positions_file use_mock_hardware:=true port:=/dev/ttyUSB0 baudrate:=1000000 read_only:=false">
         <xacro:property name="initial_positions" value="${xacro.load_yaml(initial_positions_file)['initial_positions']}"/>
 
         <ros2_control name="${name}" type="system">
-            <hardware>
-                <!-- By default, set up controllers for simulation. This won't work on real hardware -->
-                <plugin>mock_components/GenericSystem</plugin>
-            </hardware>
-            <joint name="joint1">
-                <command_interface name="position"/>
-                <state_interface name="position">
-                  <param name="initial_value">${initial_positions['joint1']}</param>
-                </state_interface>
-                <state_interface name="velocity"/>
-            </joint>
-            <joint name="joint2">
-                <command_interface name="position"/>
-                <state_interface name="position">
-                  <param name="initial_value">${initial_positions['joint2']}</param>
-                </state_interface>
-                <state_interface name="velocity"/>
-            </joint>
-            <joint name="joint3">
-                <command_interface name="position"/>
-                <state_interface name="position">
-                  <param name="initial_value">${initial_positions['joint3']}</param>
-                </state_interface>
-                <state_interface name="velocity"/>
-            </joint>
-            <joint name="joint4">
-                <command_interface name="position"/>
-                <state_interface name="position">
-                  <param name="initial_value">${initial_positions['joint4']}</param>
-                </state_interface>
-                <state_interface name="velocity"/>
-            </joint>
-            <joint name="joint5">
-                <command_interface name="position"/>
-                <state_interface name="position">
-                  <param name="initial_value">${initial_positions['joint5']}</param>
-                </state_interface>
-                <state_interface name="velocity"/>
-            </joint>
-            <joint name="joint6">
-                <command_interface name="position"/>
-                <state_interface name="position">
-                  <param name="initial_value">${initial_positions['joint6']}</param>
-                </state_interface>
-                <state_interface name="velocity"/>
-            </joint>
-            <joint name="joint7_left">
-                <command_interface name="position"/>
-                <state_interface name="position">
-                  <param name="initial_value">${initial_positions['joint7_left']}</param>
-                </state_interface>
-                <state_interface name="velocity"/>
-            </joint>
-
+            <xacro:fashionstar_hardware use_mock_hardware="${use_mock_hardware}" port="${port}" baudrate="${baudrate}"/>
+            <xacro:fashionstar_joint name="joint1" id="0" lower="-2.27" upper="2.27" read_only="${read_only}" initial_value="${initial_positions['joint1']}"/>
+            <xacro:fashionstar_joint name="joint2" id="1" lower="-1.57" upper="1.57" read_only="${read_only}" initial_value="${initial_positions['joint2']}"/>
+            <xacro:fashionstar_joint name="joint3" id="2" lower="-1.57" upper="1.57" read_only="${read_only}" initial_value="${initial_positions['joint3']}"/>
+            <xacro:fashionstar_joint name="joint4" id="3" lower="-2.27" upper="2.27" read_only="${read_only}" initial_value="${initial_positions['joint4']}"/>
+            <xacro:fashionstar_joint name="joint5" id="4" lower="-1.57" upper="1.57" read_only="${read_only}" initial_value="${initial_positions['joint5']}"/>
+            <xacro:fashionstar_joint name="joint6" id="5" lower="-2.27" upper="2.27" read_only="${read_only}" initial_value="${initial_positions['joint6']}"/>
+            <xacro:fashionstar_gripper name="joint7_left" id="6" lower="-0.03" scale="0.00032" offset_deg="100"
+                                       read_only="${read_only}" initial_value="${initial_positions['joint7_left']}"/>
         </ros2_control>
     </xacro:macro>
 </robot>
