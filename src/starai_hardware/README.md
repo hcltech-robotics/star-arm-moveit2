@@ -142,7 +142,8 @@ State interfaces: `position`, `velocity`, and optionally `current` (A), `voltage
    them `grip_squeeze` past that point. The Cello uses 0 (hold where blocked): the object
    stays pressed as it was when the fingers stopped. 1 mm past contact already pushed at
    the full 1 W. The gripper controller sees a stalled grasp, so MoveIt and
-   GripperCommand work as before. A new command (e.g. open) clears it.
+   GripperCommand work as before. A new command (e.g. open) clears it. Closing again
+   without opening does not re-grip (the command is unchanged): open first.
 
 ## Limits
 

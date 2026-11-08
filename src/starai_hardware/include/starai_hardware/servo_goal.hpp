@@ -109,8 +109,11 @@ inline bool should_send(
 // OVER_POWER flag every cycle and disturbs the bus. Instead, once the fingers have been stopped
 // more than kGripBlockedDeg short of the goal for `stall_s`, the goal becomes "where they
 // stopped + squeeze_deg" (0 = hold right there; the object stays pressed as it was when the
-// fingers stopped). Negative turns it off. A new command goal clears it. If the object slips,
-// the gripper closes only to the squeeze goal and does not re-grip.
+// fingers stopped). Negative turns it off. A command that moves more than kGripBlockedDeg
+// clears it, so sensor noise from a teleop leader does not, but squeezing the leader further
+// re-grips. A repeated identical close does not re-grip (the controller keeps commanding the
+// same goal after a stall): open first. If the object slips, the gripper closes only to the
+// squeeze goal.
 constexpr double kGripBlockedDeg = 2.0;
 
 struct GripSqueeze
@@ -125,7 +128,7 @@ inline double grip_squeeze(
   double goal_deg, double measured_deg, double speed_dps, double dt, double squeeze_deg,
   double stall_s, GripSqueeze & s)
 {
-  if (std::abs(goal_deg - s.command_deg) > 1e-6) {
+  if (std::abs(goal_deg - s.command_deg) > kGripBlockedDeg) {
     s = GripSqueeze{};
     s.command_deg = goal_deg;
   }

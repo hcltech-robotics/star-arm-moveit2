@@ -151,6 +151,9 @@ TEST(ServoGoal, StalledGripperSqueezesJustPastContact)
   EXPECT_DOUBLE_EQ(grip_squeeze(0.0, 47.0, 0.0, 0.01, 4.0, 0.2, s), 43.0);
   // Held: the squeeze goal stays put while the object gives a little.
   EXPECT_DOUBLE_EQ(grip_squeeze(0.0, 45.5, 0.0, 0.01, 4.0, 0.2, s), 43.0);
+  // A teleop leader's sensor noise does not release the hold.
+  EXPECT_DOUBLE_EQ(grip_squeeze(0.1, 45.5, 0.0, 0.01, 4.0, 0.2, s), 43.0);
+  EXPECT_DOUBLE_EQ(grip_squeeze(-0.2, 45.5, 0.0, 0.01, 4.0, 0.2, s), 43.0);
   // A new command (open) clears it at once.
   EXPECT_DOUBLE_EQ(grip_squeeze(100.0, 45.5, 0.0, 0.01, 4.0, 0.2, s), 100.0);
   EXPECT_FALSE(s.active);
