@@ -86,7 +86,7 @@ Other safety behaviour:
 * **Command clamping:** commands are clamped to the `min`/`max` of each position command
   interface.
 * **Fault logging:** stall, voltage, current, power and temperature faults are logged
-  when they appear and when they clear.
+  when they appear and when they clear. A flickering fault is logged at most every 2 s.
 
 ## Parameters
 
@@ -134,8 +134,9 @@ State interfaces: `position`, `velocity`, and optionally `current` (A), `voltage
 4. **Grasping:** the gripper holds by pushing on the object at its power limit. Its
    goal is re-sent at most once while it is blocked, so the object is not re-squeezed.
    Keep `power_mw` below the servo's own stall protection: on the Cello gripper 2 W
-   tripped OVER_POWER on a firm object and the servo stopped replying, so it runs at
-   1.5 W and may miss up to 50 replies before the driver stops the arm.
+   tripped OVER_POWER on a firm object and the servo stopped replying (1.5 W still
+   flickered it), so it runs at 1 W and may miss up to 50 replies before the driver
+   stops the arm.
 
 ## Limits
 

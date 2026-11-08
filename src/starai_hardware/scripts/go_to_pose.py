@@ -20,6 +20,12 @@ from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 
+def too_far(joints, target, state, max_start):
+    """Joints (name, distance in rad) further than max_start rad from the target."""
+    dist = {j: abs(t - state[j]) for j, t in zip(joints, target)}
+    return [(j, d) for j, d in dist.items() if d > max_start]
+
+
 def main():
     rclpy.init()
     node = Node('go_to_pose')
@@ -43,14 +49,14 @@ def main():
     while rclpy.ok() and not all(j in state for j in joints):
         rclpy.spin_once(node, timeout_sec=0.1)
 
-    dist = [abs(t - state[j]) for j, t in zip(joints, target)]
-    far = [f'{j} {math.degrees(d):.1f} deg' for j, d in zip(joints, dist) if d > max_start]
+    far = too_far(joints, target, state, max_start)
     if far:
-        log.warning(f'not moving: too far from the target pose ({", ".join(far)}; limit '
+        far = ', '.join(f'{j} {math.degrees(d):.1f} deg' for j, d in far)
+        log.warning(f'not moving: too far from the target pose ({far}; limit '
                  f'{math.degrees(max_start):.0f} deg). Move it with MoveIt instead.')
         return 0
 
-    duration = max(2.0, max(dist) / speed)
+    duration = max(2.0, max(abs(t - state[j]) for j, t in zip(joints, target)) / speed)
     goal = FollowJointTrajectory.Goal()
     goal.trajectory.joint_names = list(joints)
     goal.trajectory.points = [JointTrajectoryPoint(

@@ -62,6 +62,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_protocol fashionstar_bus)
   ament_add_gtest(test_servo_goal test/test_servo_goal.cpp)
   target_link_libraries(test_servo_goal fashionstar_bus)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_go_to_pose test/test_go_to_pose.py)
 endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)

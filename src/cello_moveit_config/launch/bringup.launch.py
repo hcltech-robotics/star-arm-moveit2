@@ -100,9 +100,10 @@ def launch_setup(context):
 
     # Leave the parking stops: move to a named SRDF pose once the arm controller is up.
     # MoveIt cannot plan from the stops (the folded arm counts as a self-collision).
+    # Mock hardware starts at all zeros, too far to move, so it is skipped there.
     nodes = [robot_state_publisher, ros2_control_node, spawner, move_group, rviz]
     startup_pose = LaunchConfiguration("startup_pose").perform(context)
-    if startup_pose:
+    if startup_pose and use_mock != "true":
         srdf = ET.fromstring(
             moveit_config.robot_description_semantic["robot_description_semantic"])
         state = next((g for g in srdf.iter("group_state")

@@ -565,10 +565,14 @@ void FashionStarSystem::apply_sample(Joint & j, const fsus::MonitorData & m, Clo
 void FashionStarSystem::log_status_change(Joint & j, uint8_t status)
 {
   // A flag can flicker every cycle (a gripper squeezing an object toggles OVER_POWER), so
-  // the log follows the fault state at most every 2 s per servo.
+  // repeats and clears are logged at most every 2 s per servo. A new kind of fault is
+  // always logged at once.
   const uint8_t faults = status & fsus::kStatusFaultMask;
   const auto now = Clock::now();
-  if (faults == j.logged_faults || now - j.last_fault_log < std::chrono::seconds(2)) {
+  const bool new_fault = faults & ~j.logged_faults;
+  if (faults == j.logged_faults ||
+    (!new_fault && now - j.last_fault_log < std::chrono::seconds(2)))
+  {
     return;
   }
   j.logged_faults = faults;
