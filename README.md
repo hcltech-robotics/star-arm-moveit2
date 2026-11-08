@@ -38,7 +38,7 @@ source install/setup.bash
 | package | contents |
 |---|---|
 | [`starai_hardware`](src/starai_hardware/README.md) | `ros2_control` driver for the Fashion Star servo bus |
-| `starai_bringup` | `bringup.launch.py` (any arm) and `teleop.launch.py` (Violin -> Viola) |
+| `starai_bringup` | `bringup.launch.py` (any arm) and `teleop.launch.py` (Violin -> Cello or Viola) |
 | `cello_description`, `viola_description` | URDF and meshes |
 | `cello_moveit_config`, `viola_moveit_config` | MoveIt config, controllers, limits, named poses |
 
@@ -66,19 +66,21 @@ ros2 run starai_hardware fake_fashionstar_bus.py --link /tmp/ttyFAKE &
 ros2 launch starai_bringup bringup.launch.py arm:=viola port:=/tmp/ttyFAKE
 ```
 
-## Teleop: Violin leads, Viola follows
+## Teleop: Violin leads, Cello or Viola follows
 
 Connect both arms, then:
 
 ```bash
-ros2 launch starai_bringup teleop.launch.py follower_port:=/dev/ttyUSB0 leader_port:=/dev/ttyUSB1
+ros2 launch starai_bringup teleop.launch.py arm:=cello follower_port:=/dev/ttyUSB0 leader_port:=/dev/ttyUSB1
 ```
 
 * The Violin runs the same driver read-only, in the `/violin` namespace: torque stays off,
   no motion command is ever sent to it, and it publishes `/violin/joint_states`.
-* At start (and after the leader goes silent), the Viola moves to the Violin's pose at
+* The Violin's joint zeros and directions match the followers, so angles pass through
+  unchanged (checked against the Cello).
+* At start (and after the leader goes silent), the follower moves to the Violin's pose at
   0.3 rad/s, then follows at up to 1.5 rad/s per joint. There is no collision checking.
-* The Violin's gripper reading is mapped linearly onto the Viola's gripper
+* The Violin's trigger is mapped linearly onto the follower's gripper
   (`leader_gripper_open/closed` and `follower_gripper_open/closed` on the `teleop` node).
   A grasped object is held where the fingers were blocked, so holding it does not
   overheat the gripper.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Leader-follower teleop: a read-only leader arm (Violin) moved by hand drives a follower
-arm (Viola) through its standard controllers.
+arm (Cello or Viola) through its standard controllers. Joint angles pass through unchanged:
+the Violin's zeros and directions match the followers.
 
     leader  /violin/joint_states  ->  follower /arm_controller/joint_trajectory (streamed)
                                                /hand_controller/gripper_cmd (on change)
@@ -45,7 +46,10 @@ class Teleop(Node):
         self.synced_tol = p('synced_tolerance', 0.05).value     # rad
         self.lead = p('lead_time', 0.1).value                   # s
         self.stale = p('leader_timeout', 0.2).value             # s
-        self.g_leader = (p('leader_gripper_open', 0.0).value, p('leader_gripper_closed', -0.03).value)
+        # Violin trigger, as read through the Viola gripper conversion: released -0.0172,
+        # squeezed -0.0322 (measured); 1 mm margin so both ends are reached.
+        self.g_leader = (p('leader_gripper_open', -0.018).value,
+                         p('leader_gripper_closed', -0.031).value)
         self.g_follower = (p('follower_gripper_open', 0.0).value,
                            p('follower_gripper_closed', -0.03).value)
         self.g_deadband = p('gripper_deadband', 0.001).value    # m
