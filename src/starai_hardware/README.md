@@ -102,9 +102,9 @@ Hardware (`<hardware><param>`):
 | `trim_deadband_deg`, `trim_max_deg` | `0.2`, `3.0` | errors within the deadband are not trimmed; trim limit per joint |
 | `t_acc_ms` / `t_dec_ms` | `20` | servo accel/decel ramp per command |
 | `min_speed_dps` / `max_speed_dps` | `2` / `360` | cruise speed clamp (deg/s) |
-| `power_mw` / `hold_power_mw` | `8000` | power limit sent with motion / hold commands |
+| `power_mw` / `hold_power_mw` | `8000` | power limit sent with motion / hold commands (hold never exceeds a joint's `power_mw`) |
 | `read_timeout_ms` | `8` | per-cycle wait for monitor replies |
-| `max_consecutive_misses` | `5` | missed replies before the hardware errors out |
+| `max_consecutive_misses` | `5` | missed replies before the hardware errors out (also per joint) |
 | `velocity_filter_hz` | `15` | low-pass cutoff of the velocity estimate |
 | `goal_deadband_deg` | `0.05` | goal change that counts as a new goal |
 | `hold_tolerance_deg`, `resend_s` | `1.5`, `1.0` | re-send a holding joint that drifted this far off its goal, at most this often |
@@ -115,7 +115,7 @@ Hardware (`<hardware><param>`):
 
 Joint (`<joint><param>`): `id` (required), `scale` (joint units per servo degree,
 default π/180, negative to invert), `offset_deg` (servo angle at joint zero),
-`max_speed_dps`, `power_mw`, `feedforward` (`false` for step-commanded joints such as grippers).
+`max_speed_dps`, `power_mw`, `max_consecutive_misses`, `feedforward` (`false` for step-commanded joints such as grippers).
 
 State interfaces: `position`, `velocity`, and optionally `current` (A), `voltage` (V),
 `temperature` (°C), `status` (raw bits). Command interfaces: `position`, optional `velocity`.
@@ -133,7 +133,9 @@ State interfaces: `position`, `velocity`, and optionally `current` (A), `voltage
    Then try `update_rate: 150` in `ros2_controllers.yaml`.
 4. **Grasping:** the gripper holds by pushing on the object at its power limit. Its
    goal is re-sent at most once while it is blocked, so the object is not re-squeezed.
-   Keep `power_mw` at or below the servo's own stall power (2 W on the Cello gripper).
+   Keep `power_mw` below the servo's own stall protection: on the Cello gripper 2 W
+   tripped OVER_POWER on a firm object and the servo stopped replying, so it runs at
+   1.5 W and may miss up to 50 replies before the driver stops the arm.
 
 ## Limits
 

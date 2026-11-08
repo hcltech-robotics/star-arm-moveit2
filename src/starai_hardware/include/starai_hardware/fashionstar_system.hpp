@@ -110,6 +110,7 @@ private:
     double max_pos = 0.0;
     double max_speed_dps = 0.0;
     uint16_t power_mw = 0;
+    int max_misses = 0;        // missed replies in a row before read() fails
     bool feedforward = true;   // aim ahead using the commanded/estimated velocity
 
     // Exported state
@@ -133,7 +134,8 @@ private:
     Clock::time_point last_send{};
     bool sent_once = false;
     int misses = 0;
-    uint8_t last_status = 0;
+    uint8_t logged_faults = 0;   // fault bits last reported in the log
+    Clock::time_point last_fault_log{};
     double trim_deg = 0.0;     // gravity trim added to the servo goal
     double still_s = 0.0;      // how long the setpoint has been still
     bool drift_resent = false; // current goal already re-sent because the servo drifted

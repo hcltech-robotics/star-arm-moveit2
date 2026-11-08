@@ -207,10 +207,12 @@ bool FashionStarSystem::parse_params(std::string & error)
     j.scale = kDegToRad;
     j.max_speed_dps = p.max_speed_dps;
     j.power_mw = p.power_mw;
+    j.max_misses = p.max_consecutive_misses;
     if (!get_number(jp, "scale", j.scale, error) ||
       !get_number(jp, "offset_deg", j.offset_deg, error) ||
       !get_number(jp, "max_speed_dps", j.max_speed_dps, error, 1, 6000) ||
-      !get_number(jp, "power_mw", j.power_mw, error, 0, 65535))
+      !get_number(jp, "power_mw", j.power_mw, error, 0, 65535) ||
+      !get_number(jp, "max_consecutive_misses", j.max_misses, error, 1, 1000))
     {
       error = "joint '" + ji.name + "': " + error;
       return false;
@@ -509,7 +511,9 @@ void FashionStarSystem::stop_all(StopBehavior behavior)
   // Repeat: these frames are unacknowledged and this is the last word we send.
   for (int r = 0; r < 2; ++r) {
     for (const auto & j : joints_) {
-      bus_.stop(j.id, mode, params_.hold_power_mw);
+      // Never hold harder than the joint's own limit: a gripper holding an object
+      // at the 8 W default heats up fast (48 C in 8 minutes on the Cello).
+      bus_.stop(j.id, mode, std::min(params_.hold_power_mw, j.power_mw));
     }
   }
 }
@@ -560,12 +564,15 @@ void FashionStarSystem::apply_sample(Joint & j, const fsus::MonitorData & m, Clo
 
 void FashionStarSystem::log_status_change(Joint & j, uint8_t status)
 {
+  // A flag can flicker every cycle (a gripper squeezing an object toggles OVER_POWER), so
+  // the log follows the fault state at most every 2 s per servo.
   const uint8_t faults = status & fsus::kStatusFaultMask;
-  const uint8_t prev = j.last_status & fsus::kStatusFaultMask;
-  j.last_status = status;
-  if (faults == prev) {
+  const auto now = Clock::now();
+  if (faults == j.logged_faults || now - j.last_fault_log < std::chrono::seconds(2)) {
     return;
   }
+  j.logged_faults = faults;
+  j.last_fault_log = now;
   if (faults) {
     RCLCPP_WARN(
       logger_, "%s (id %d) reports:%s (temp %.1fC, %.2fA, %.2fV)", j.name.c_str(), j.id,
@@ -596,7 +603,7 @@ FashionStarSystem::return_type FashionStarSystem::read(
     if (monitor_valid_[i]) {
       apply_sample(j, monitor_[i], t1);
       j.misses = 0;
-    } else if (++j.misses >= params_.max_consecutive_misses) {
+    } else if (++j.misses >= j.max_misses) {
       RCLCPP_ERROR(
         logger_, "%s (id %d) missed %d consecutive reads; stopping (bus %s)", j.name.c_str(),
         j.id, j.misses, params_.port.c_str());

@@ -13,6 +13,7 @@ MoveIt Servo talk to the standard JointTrajectoryController, which streams to th
 servos through starai_hardware/FashionStarSystem.
 """
 import os
+import xml.etree.ElementTree as ET
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -97,7 +98,28 @@ def launch_setup(context):
         condition=IfCondition(LaunchConfiguration("use_rviz")),
     )
 
-    return [robot_state_publisher, ros2_control_node, spawner, move_group, rviz]
+    # Leave the parking stops: move to a named SRDF pose once the arm controller is up.
+    # MoveIt cannot plan from the stops (the folded arm counts as a self-collision).
+    nodes = [robot_state_publisher, ros2_control_node, spawner, move_group, rviz]
+    startup_pose = LaunchConfiguration("startup_pose").perform(context)
+    if startup_pose:
+        srdf = ET.fromstring(
+            moveit_config.robot_description_semantic["robot_description_semantic"])
+        state = next((g for g in srdf.iter("group_state")
+                      if g.get("name") == startup_pose and g.get("group") == "arm"), None)
+        if state is None:
+            raise RuntimeError(f"startup_pose '{startup_pose}' is not an arm state in the SRDF")
+        pose = [(j.get("name"), j.get("value")) for j in state.iter("joint")]
+        nodes.append(Node(
+            package="starai_hardware",
+            executable="go_to_pose.py",
+            output="screen",
+            parameters=[{
+                "joints": [j for j, _ in pose],
+                "positions": [float(v) for _, v in pose],
+            }],
+        ))
+    return nodes
 
 
 def generate_launch_description():
@@ -107,6 +129,10 @@ def generate_launch_description():
         DeclareLaunchArgument("port", default_value="/dev/ttyUSB0",
                               description="Servo bus serial port"),
         DeclareLaunchArgument("baudrate", default_value="1000000"),
+        DeclareLaunchArgument(
+            "startup_pose", default_value="rest",
+            description="SRDF arm pose to move to after startup, only if every joint is "
+                        "within 15 deg of it ('' = stay put)"),
         DeclareLaunchArgument("use_moveit", default_value="true"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
         OpaqueFunction(function=launch_setup),

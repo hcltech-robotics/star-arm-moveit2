@@ -39,14 +39,15 @@
         <joint name="joint5" value="0"/>
         <joint name="joint6" value="0"/>
     </group_state>
-    <!-- Folded parking pose, 2 deg off the joint2/joint3 stops: fully folded (-90/90)
-         counts as a self-collision in the coarse meshes, 1 deg off is already clear. -->
+    <!-- Parking pose: forearm lying on the upper arm, joint2/joint3 exactly on their
+         mechanical stops (measured), so the stops carry the arm and every servo idles
+         (~14 mA). joint5 at 25 deg: the gripper touches the base from ~30 deg on. -->
     <group_state name="rest" group="arm">
         <joint name="joint1" value="0"/>
-        <joint name="joint2" value="-1.5359"/>
-        <joint name="joint3" value="1.5359"/>
+        <joint name="joint2" value="-1.5743"/>
+        <joint name="joint3" value="1.5795"/>
         <joint name="joint4" value="0"/>
-        <joint name="joint5" value="0.5236"/>
+        <joint name="joint5" value="0.4363"/>
         <joint name="joint6" value="0"/>
     </group_state>
     <group_state name="pose_1" group="arm">
@@ -99,6 +100,9 @@
     <disable_collisions link1="link1" link2="link2" reason="Adjacent"/>
     <disable_collisions link1="link1" link2="link3" reason="Never"/>
     <disable_collisions link1="link2" link2="link3" reason="Adjacent"/>
+    <!-- The forearm rests on the upper arm at the joint3 stop; the stop keeps it from
+         going further. Without this MoveIt cannot plan out of the rest pose. -->
+    <disable_collisions link1="link2" link2="link4" reason="User"/>
     <disable_collisions link1="link2" link2="link7_left" reason="Never"/>
     <disable_collisions link1="link2" link2="link7_right" reason="Never"/>
     <disable_collisions link1="link3" link2="link4" reason="Adjacent"/>

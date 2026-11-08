@@ -50,6 +50,7 @@ install(TARGETS fashionstar_bus starai_hardware
 )
 install(PROGRAMS
   scripts/fake_fashionstar_bus.py
+  scripts/go_to_pose.py
   scripts/teach_mode
   scripts/track_test.py
   DESTINATION lib/${PROJECT_NAME}

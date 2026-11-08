@@ -74,9 +74,12 @@
                 <!-- grippers get step commands: drive straight to the target -->
                 <param name="feedforward">false</param>
                 <param name="max_speed_dps">200</param>
-                <!-- matches the servo's own stall power limit (2 W): more only trips its
-                     OVER_POWER flag when the fingers close on an object -->
-                <param name="power_mw">2000</param>
+                <!-- Below the servo's own stall protection: at 2 W a firm 2 cm object
+                     tripped OVER_POWER and the servo stopped replying (measured). -->
+                <param name="power_mw">1000</param>
+                <!-- A gripper that pauses its replies (e.g. after an OVER_POWER trip) must
+                     not stop the whole arm: allow 0.5 s of silence instead of 50 ms. -->
+                <param name="max_consecutive_misses">50</param>
                 <command_interface name="position">
                     <param name="min">-0.026</param>
                     <param name="max">0.0</param>

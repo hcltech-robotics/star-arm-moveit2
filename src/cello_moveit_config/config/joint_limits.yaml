@@ -4,7 +4,8 @@
 # them MoveIt falls back to a generic default and produces abrupt profiles.
 # joint1-3 are measured on the Cello at the default 8 W servo power: lifting the
 # stretched-out arm, joint2 manages ~3 rad/s^2 and ~70 deg/s (higher limits made it fall
-# 14 deg behind and abort). The wrist limits (joint4-6) are not measured yet.
+# 14 deg behind and abort). joint4-6 at 3.5 rad/s, 10 rad/s^2: 60 deg wrist moves at
+# scaling 1.0 lag at most 3.8 deg.
 # Use the scaling factors (or the RViz sliders) to go slower.
 default_velocity_scaling_factor: 0.3
 default_acceleration_scaling_factor: 0.3
