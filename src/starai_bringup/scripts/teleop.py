@@ -11,6 +11,8 @@ was silent, the follower first moves to the leader's pose at `approach_speed`, a
 at `max_speed` only once it has caught up. There is no collision checking.
 """
 
+import math
+
 import rclpy
 from control_msgs.action import GripperCommand
 from rclpy.action import ActionClient
@@ -24,6 +26,11 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 def step_toward(current, target, max_step):
     """Move each joint at most max_step toward its target."""
     return [c + max(-max_step, min(max_step, t - c)) for c, t in zip(current, target)]
+
+
+def past_half_turn(joints, positions):
+    """Joints beyond +-pi: the leader's servos count full turns, the followers can't."""
+    return [j for j, p in zip(joints, positions) if abs(p) > math.pi]
 
 
 def map_gripper(x, leader_open, leader_closed, follower_open, follower_closed):
@@ -96,6 +103,12 @@ class Teleop(Node):
             self.get_logger().info('approaching the leader pose')
 
         target = [self.leader[j] for j in self.joints]
+        wound = past_half_turn(self.joints, target)
+        if wound:
+            # The follower's driver clamps at its +-180 deg limits: it stops there.
+            self.get_logger().warning(
+                f'leader {", ".join(wound)} turned past 180 deg: the follower stops at its '
+                'limit; turn it back', throttle_duration_sec=3.0)
         speed = self.max_speed if self.synced else self.approach_speed
         self.cmd = step_toward(self.cmd, target, speed / self.rate)
         if not self.synced and max(abs(t - c) for t, c in zip(target, self.cmd)) < self.synced_tol:

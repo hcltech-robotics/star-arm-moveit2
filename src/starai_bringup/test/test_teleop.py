@@ -19,3 +19,10 @@ def test_gripper_maps_and_clamps():
     assert m(-0.01) == pytest.approx(-0.015)   # half closed
     assert m(0.005) == 0.0                     # past open
     assert m(-0.05) == pytest.approx(-0.03)    # past closed
+
+
+def test_wrist_past_half_turn_is_flagged():
+    # Seen on the real Violin: joint6 read -270.9 deg after the handle was turned.
+    joints = ['joint4', 'joint6']
+    assert teleop.past_half_turn(joints, [3.11, -4.728]) == ['joint6']
+    assert teleop.past_half_turn(joints, [3.11, -3.1]) == []
