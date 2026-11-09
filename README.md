@@ -4,18 +4,41 @@
   <div style="display: flex; gap: 1rem; justify-content: center; align-items: center;" >
     <img
       src="images\viola_and_violin.jpg"
-      alt="SO-101 follower arm"
-      title="SO-101 follower arm"
+      alt="Viola and Violin arms"
+      title="Viola and Violin arms"
       style="width: 80%;"
     />
     <img
       src="images\cello.jpg"
-      alt="SO-101 leader arm"
-      title="SO-101 leader arm"
+      alt="Cello arm"
+      title="Cello arm"
       style="width: 80%;"
     />
   </div>
 </div>
+
+## How this fork differs from upstream
+
+Forked from [Welt-liu/starai-arm-moveit2](https://github.com/Welt-liu/starai-arm-moveit2)
+(ROS 2 Humble, Python driver node). We wanted the arms on ROS 2 Jazzy with standard
+`ros2_control`, smooth MoveIt motion and leader-arm teleop.
+
+* **New driver:** [`starai_hardware`](src/starai_hardware/README.md), a C++ `ros2_control`
+  hardware interface that talks to the Fashion Star servos directly, with no Python SDK.
+  MoveIt uses the standard joint trajectory and gripper controllers.
+* **One bringup for both arms:** `starai_bringup` (`arm:=cello|viola`) starts the driver,
+  controllers, MoveIt and RViz.
+* **Teleop:** the Violin acts as a hand-moved leader (read-only, torque off), and the Cello or
+  the Viola follows it.
+* **Fixed:**
+  * The arm no longer jumps to zero at startup. It holds its pose and only moves to rest if
+    it is already close.
+  * No hold jitter.
+  * The gripper holds an object without overheating.
+  * Cello joint limits, rest pose and gripper are measured on the real arm.
+  * Viola gripper URDF limit.
+* **Removed:** the Python driver, the per-arm controller nodes, the pose read/write demos,
+  Gazebo, the bag recorder and the VR pose tracking.
 
 
 ## Setup
