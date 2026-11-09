@@ -25,7 +25,9 @@ Forked from [Welt-liu/starai-arm-moveit2](https://github.com/Welt-liu/starai-arm
 
 * **New driver:** [`starai_hardware`](src/starai_hardware/README.md), a C++ `ros2_control`
   hardware interface that talks to the Fashion Star servos directly, with no Python SDK.
-  MoveIt uses the standard joint trajectory and gripper controllers.
+  MoveIt uses the standard joint trajectory and gripper controllers. The driver reads and
+  commands all servos at 100 Hz. Upstream publishes joint states at about 33 Hz, and sends
+  the servos one move per MoveIt waypoint, each stretched by 400 ms.
 * **One bringup for both arms:** `starai_bringup` (`arm:=cello|viola`) starts the driver,
   controllers, MoveIt and RViz.
 * **Teleop:** the Violin acts as a hand-moved leader (read-only, torque off), and the Cello or
